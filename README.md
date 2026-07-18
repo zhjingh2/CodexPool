@@ -70,3 +70,11 @@ node dist/src/cli/main.js account list --refresh
 ```
 
 默认列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；`--refresh` 会为每个账号创建隔离临时 `CODEX_HOME`，启动短生命周期 app-server，查询套餐、额度、重置时间和用量后更新缓存。
+
+## 永久清理账号
+
+```bash
+node dist/src/cli/main.js account purge personal
+```
+
+该命令只允许清理非当前激活账号，并要求交互式精确输入别名确认。脚本或非交互环境可显式传入 `--confirm personal`。清理范围是账号池中的 `auth.json`、`metadata.json` 和额度缓存；共享的 Codex 会话、项目和插件状态不会删除。清理完成后不可恢复，只能重新登录。

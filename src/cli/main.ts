@@ -4,6 +4,7 @@ import {
   AccountStoreError,
   addCurrentAccount,
   listAccounts,
+  purgeAccount,
   renameAccount,
 } from "../account-store/index.js";
 import { switchAccount } from "../auth-swap/index.js";
@@ -11,6 +12,8 @@ import { runDoctor } from "../preflight/doctor.js";
 import { renderDoctorReport } from "../preflight/render.js";
 import { loginAccount } from "../runtime/index.js";
 import { refreshAccount } from "../usage/index.js";
+import { createInterface } from "node:readline/promises";
+import { stdin as standardInput, stdout as standardOutput } from "node:process";
 
 const HELP = `Codex Pool
 
@@ -20,6 +23,7 @@ Usage:
   codex-pool account login <alias>
   codex-pool account list [--refresh] [--json]
   codex-pool account rename <from> <to>
+  codex-pool account purge <alias>
   codex-pool switch <alias>
   codex-pool --help
   codex-pool --version
@@ -135,12 +139,45 @@ async function main(args: string[]): Promise<number> {
         return 1;
       }
     }
+    if (action === "purge") {
+      if (!alias) {
+        process.stderr.write("Usage: codex-pool account purge <alias>\n");
+        return 2;
+      }
+      let confirmation: string | undefined;
+      if (accountOptions.length === 2 && accountOptions[0] === "--confirm") {
+        confirmation = accountOptions[1];
+      } else if (accountOptions.length > 0) {
+        process.stderr.write("Usage: codex-pool account purge <alias> [--confirm <alias>]\n");
+        return 2;
+      } else if (standardInput.isTTY && standardOutput.isTTY) {
+        const prompt = createInterface({ input: standardInput, output: standardOutput });
+        confirmation = await prompt.question(`永久删除账号 ${alias}？请输入账号别名确认：`);
+        prompt.close();
+      }
+      try {
+        const result = purgeAccount({
+          alias,
+          ...(confirmation === undefined ? {} : { confirmation }),
+        });
+        process.stdout.write(`已永久删除账号 ${result.alias} 的本地凭证、元数据和用量缓存。\n`);
+        return 0;
+      } catch (error) {
+        if (error instanceof AccountStoreError) {
+          process.stderr.write(`账号 purge 失败：${error.message}\n`);
+          return 1;
+        }
+        process.stderr.write("账号 purge 失败：发生未预期错误，未完成删除。\n");
+        return 1;
+      }
+    }
     if ((action !== "add" && action !== "login") || !alias) {
       process.stderr.write(
         "Usage: codex-pool account add <alias> [--json]\n" +
           "       codex-pool account login <alias>\n" +
           "       codex-pool account list [--refresh] [--json]\n" +
-          "       codex-pool account rename <from> <to>\n",
+          "       codex-pool account rename <from> <to>\n" +
+          "       codex-pool account purge <alias>\n",
       );
       return 2;
     }

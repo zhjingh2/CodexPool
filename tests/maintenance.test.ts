@@ -14,6 +14,7 @@ import {
   addCurrentAccount,
   importAccountFromHome,
   listAccounts,
+  purgeAccount,
   renameAccount,
 } from "../src/account-store/index.js";
 import { AccountStoreError } from "../src/account-store/errors.js";
@@ -133,6 +134,60 @@ test("rejects rename when destination exists or source is missing", () => {
       () => renameAccount({ from: "work", to: "company", env: environment.env, userHome: environment.root }),
       (error: unknown) => error instanceof AccountStoreError && error.code === "ALIAS_EXISTS",
     );
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("purges an inactive account only after exact confirmation", () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    const otherHome = join(environment.root, "other-home");
+    mkdirSync(otherHome, { mode: 0o700 });
+    writeFileSync(join(otherHome, "auth.json"), authText("account-b"), { mode: 0o600 });
+    importAccountFromHome({ alias: "personal", authHome: otherHome, poolHome: environment.poolHome, setActiveAccount: false });
+
+    assert.throws(
+      () => purgeAccount({ alias: "personal", env: environment.env, userHome: environment.root }),
+      (error: unknown) => error instanceof AccountStoreError && error.code === "PURGE_CONFIRMATION_REQUIRED",
+    );
+    const result = purgeAccount({
+      alias: "personal",
+      confirmation: "personal",
+      env: environment.env,
+      userHome: environment.root,
+    });
+    assert.equal(result.alias, "personal");
+    assert.equal(existsSync(join(environment.poolHome, "accounts", "personal")), false);
+    assert.equal(existsSync(join(environment.poolHome, "accounts", "work")), true);
+    assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "work\n");
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("does not purge the current account", () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    assert.throws(
+      () => purgeAccount({ alias: "work", confirmation: "work", env: environment.env, userHome: environment.root }),
+      (error: unknown) => error instanceof AccountStoreError && error.code === "CURRENT_ACCOUNT_PROTECTED",
+    );
+    assert.equal(existsSync(join(environment.poolHome, "accounts", "work")), true);
   } finally {
     environment.cleanup();
   }

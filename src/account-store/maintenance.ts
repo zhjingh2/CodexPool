@@ -2,6 +2,7 @@ import {
   existsSync,
   lstatSync,
   readFileSync,
+  rmSync,
   renameSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -24,6 +25,20 @@ export interface RenameAccountResult {
   to: string;
   accountFingerprint: string;
   current: boolean;
+}
+
+export interface PurgeAccountOptions {
+  alias: string;
+  /** 必须与账号别名完全一致，避免误删。 */
+  confirmation?: string;
+  env?: NodeJS.ProcessEnv;
+  userHome?: string;
+}
+
+export interface PurgeAccountResult {
+  alias: string;
+  accountFingerprint: string;
+  current: false;
 }
 
 function pathExists(path: string): boolean {
@@ -118,6 +133,61 @@ export function renameAccount(options: RenameAccountOptions): RenameAccountResul
       );
     }
     throw error;
+  } finally {
+    releaseLock();
+  }
+}
+
+export function purgeAccount(options: PurgeAccountOptions): PurgeAccountResult {
+  const alias = validateAccountAlias(options.alias);
+  if (options.confirmation !== alias) {
+    throw new AccountStoreError(
+      "PURGE_CONFIRMATION_REQUIRED",
+      `永久删除账号前必须精确输入账号别名：${alias}`,
+    );
+  }
+
+  const env = options.env ?? process.env;
+  const poolHome = resolvePoolHome(env, options.userHome ?? homedir());
+  const accountDirectory = getAccountDirectory(poolHome, alias);
+  const activePath = join(poolHome, "active-account");
+  const releaseLock = acquirePoolLock(poolHome);
+
+  try {
+    if (!pathExists(accountDirectory)) {
+      throw new AccountStoreError("ALIAS_NOT_FOUND", `账号别名 ${alias} 不存在`);
+    }
+    const accountInfo = lstatSync(accountDirectory);
+    if (!accountInfo.isDirectory() || accountInfo.isSymbolicLink()) {
+      throw new AccountStoreError("UNSAFE_DIRECTORY", `账号 ${alias} 的目录不安全`);
+    }
+
+    const metadata = readAccountMetadata(accountDirectory, alias);
+    const activeAlias = readActiveAlias(activePath);
+    if (activeAlias === alias) {
+      throw new AccountStoreError(
+        "CURRENT_ACCOUNT_PROTECTED",
+        `账号 ${alias} 是当前激活账号，请先切换到其他账号后再 purge`,
+      );
+    }
+
+    try {
+      rmSync(accountDirectory, { recursive: true, force: false });
+    } catch (error) {
+      throw new AccountStoreError(
+        "PURGE_FAILED",
+        `账号 ${alias} 删除失败：${error instanceof Error ? error.message : "未知文件系统错误"}`,
+      );
+    }
+    if (pathExists(accountDirectory)) {
+      throw new AccountStoreError("PURGE_FAILED", `账号 ${alias} 删除后仍然存在，请检查账号仓库`);
+    }
+
+    return {
+      alias,
+      accountFingerprint: metadata.accountFingerprint,
+      current: false,
+    };
   } finally {
     releaseLock();
   }
