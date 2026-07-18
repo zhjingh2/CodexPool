@@ -27,13 +27,11 @@ node dist/src/cli/main.js doctor --json
 
 ## 导入当前账号
 
-完全退出 Codex App 和 app-server 后运行：
-
 ```bash
 node dist/src/cli/main.js account add work
 ```
 
-该命令要求 `cli_auth_credentials_store = "file"`，并将当前 `auth.json` 原子复制到 `~/.codex-pool/accounts/work/`。账号指纹只保存 SHA-256 哈希，命令不会输出或记录 token。
+该命令不要求退出 Codex App，只读取当前 `auth.json` 并将其原子复制到 `~/.codex-pool/accounts/work/`。它要求 `cli_auth_credentials_store = "file"`；账号指纹只保存 SHA-256 哈希，命令不会输出或记录 token。账号切换仍属于冷切换操作，必须先退出 Codex App 和 app-server。
 
 ## 添加新账号
 
@@ -79,3 +77,13 @@ node dist/src/cli/main.js account purge personal
 ```
 
 该命令只允许清理非当前激活账号，并要求交互式精确输入别名确认。脚本或非交互环境可显式传入 `--confirm personal`。清理范围是账号池中的 `auth.json`、`metadata.json` 和额度缓存；共享的 Codex 会话、项目和插件状态不会删除。清理完成后不可恢复，只能重新登录。
+
+## macOS 菜单栏面板
+
+在 macOS 上可以启动原生菜单栏账号面板：
+
+```bash
+npm run menu
+```
+
+菜单栏面板会复用 `codex-pool account list --json`、`account add <alias>` 和 `switch <alias> --launch`，展示当前账号、完整邮箱、套餐、额度和重置时间，并提供导入当前账号、刷新、切换和打开 Codex App 入口。导入按钮会要求输入账号别名；如果别名或当前账号已存在，会在面板中提示无需重复导入，导入当前账号不要求退出 Codex App。默认从当前项目的 `dist/src/cli/main.js` 读取 CLI；如果作为独立应用启动，可设置 `CODEX_POOL_ROOT` 或 `CODEX_POOL_CLI` 指向项目和 CLI 路径。菜单栏图标位于 `macos/assets/codex-pool-account.png`，缺少资源时自动回退到 SF Symbol。完整邮箱在成功刷新账号信息后写入本地元数据，刷新未成功时显示“邮箱未刷新”，不会回退显示掩码邮箱。

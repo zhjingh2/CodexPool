@@ -3,7 +3,7 @@
 **版本**：MVP v0.1  
 **目标平台**：macOS 优先  
 **核心模式**：冷切换全局 `~/.codex/auth.json`  
-**文档状态**：MVP 核心功能实现中
+**文档状态**：MVP 核心功能实现中；CLI 核心和菜单栏第一版已可用
 
 ## 1. 项目概述
 
@@ -100,6 +100,7 @@ metadata.json                 600
 {
   "id": "work",
   "label": "工作账号",
+  "email": "zhao@example.com",
   "emailMasked": "z***@example.com",
   "planType": "pro",
   "accountFingerprint": "sha256:...",
@@ -178,11 +179,13 @@ Journal 至少记录：
 
 ### 4.3 状态采集
 
-优先通过当前 Codex 版本的本地 app-server 协议获取信息，不直接解析私有网络接口：
+优先通过当前 Codex 版本的本地 app-server 协议获取信息，不直接解析私有网络接口；邮箱读取以 app-server 为主、本地 ID Token 为安全回退：
 
 - `account/read`：读取账号邮箱和套餐；
 - `account/rateLimits/read`：读取额度窗口、使用百分比和重置时间；
 - `account/usage/read`：读取每日及累计 token 使用统计。
+
+查询顺序必须严格串行：先等待 `account/read` 完成，再请求 `account/rateLimits/read`，最后请求 `account/usage/read`，避免临时 `CODEX_HOME` 中的账号加载竞态。若 `account/read` 暂时返回 `account: null`，应短暂等待并重试一次。
 
 App Server 当前仍属于实验性接口，客户端应根据本机 Codex 版本生成或校验 JSON Schema，避免硬编码未来可能变化的字段。
 
@@ -205,9 +208,10 @@ App Server 当前仍属于实验性接口，客户端应根据本机 Codex 版�
 3. 写入最小化 `config.toml`，明确使用文件凭证；
 4. 以该目录作为 `CODEX_HOME` 启动短生命周期 app-server；
 5. 完成 `initialize`/`initialized` 握手，并启用当前版本所需的实验性能力；
-6. 调用 `account/read`、`account/rateLimits/read` 和 `account/usage/read`；
+6. 按 `account/read` → `account/rateLimits/read` → `account/usage/read` 的顺序调用；账号响应暂时为空时重试一次；
 7. 如果 app-server 刷新了 token，将临时 `auth.json` 原子同步回账号仓库；
-8. 销毁本次临时运行目录，不在账号仓库写入 SQLite、session 或日志。
+8. 如果 app-server 没有返回邮箱，从已校验账号自己的 `id_token` 声明中提取已验证邮箱，不记录或输出其他 token；
+9. 销毁本次临时运行目录，不在账号仓库写入 SQLite、session 或日志。
 
 多个账号的刷新可以串行执行；如果并行执行，每个账号必须使用独立的运行目录和账号锁，不能共享同一个 `CODEX_HOME`。
 
@@ -226,6 +230,8 @@ App Server 当前仍属于实验性接口，客户端应根据本机 Codex 版�
 5. 原子复制凭证到账号仓库；
 6. 写入脱敏元数据；
 7. 默认将该账号标记为当前账号。
+
+`account add` 只读取并复制当前凭证，不要求退出 Codex App；凭证文件按原子方式写入账号仓库。账号切换仍必须遵守冷切换的进程保护规则。
 
 重复账号不得静默覆盖，应提示用户更新已有账号或使用新别名。
 
@@ -252,7 +258,7 @@ App Server 当前仍属于实验性接口，客户端应根据本机 Codex 版�
 
 列出账号别名、邮箱、套餐、启用状态、当前激活状态、额度和重置时间。
 
-默认读取缓存并快速返回；使用 `--refresh` 时重新查询最新账号状态。
+默认读取缓存并快速返回；使用 `--refresh` 时重新查询最新账号状态，并将成功刷新时间写回元数据。
 
 推荐显示字段：
 
@@ -389,12 +395,15 @@ personal   Plus    耗尽    剩余 0%     今天 18:45     剩余 27%    -
 - 管理退出、登录、校验和导入流程；
 - 处理登录取消、过期、重复账号和网络失败。
 
-**阶段四：桌面入口**
+**阶段四：桌面入口（已实现第一版）**
 
-- 提供 macOS 菜单栏 UI；
-- 显示账号状态和额度；
-- 点击账号后执行冷切换；
-- 提供“打开 Codex App”按钮；
+- 提供 Swift 原生 macOS 菜单栏 UI；
+- 显示账号状态、套餐、额度和重置时间；
+- 点击账号后调用 `switch <alias> --launch` 执行冷切换；
+- 提供“导入当前账号”、额度刷新和“打开 Codex App”按钮；
+- 导入按钮要求输入别名，允许 Codex App 运行，复用 `account add` 的重复账号校验并在面板提示结果；
+- 刷新成功后显示本地时间 `MM-dd HH:mm:ss`，刷新期间显示转圈动画并禁止重复点击；
+- 当前仅覆盖列表、刷新、导入、`switch --launch` 和打开 App；`doctor`、`account login`、`rename`、`purge` 以及不启动 App 的纯 `switch` 仍保留在 CLI；
 - 不尝试修改已运行 App 的账号状态。
 
 ### 7.2 推荐模块
@@ -409,7 +418,7 @@ src/
 ├── process-guard/       App/app-server 进程检测
 ├── app-server/          JSON-RPC 客户端和版本适配
 ├── usage/               额度、重置时间和缓存
-└── ui/                  后续菜单栏界面
+└── macos/               Swift 原生菜单栏界面
 ```
 
 ## 8. 异常处理
@@ -424,7 +433,7 @@ src/
 - 目标别名不存在；
 - 目标账号已被标记不可用；
 - 账号重复导入；
-- App 仍在运行；
+- 切换时 App 仍在运行；导入当前账号时允许 App 运行；
 - app-server 无法启动；
 - 额度接口超时；
 - 临时 CODEX_HOME 创建或清理失败；
@@ -453,6 +462,7 @@ src/
 ### 9.2 集成测试
 
 - A/B 两个真实测试账号的导入；
+- Codex App 运行时导入当前账号；
 - A → B → A 冷切换；
 - refresh token 已更新后的再次切换；
 - 登录流程取消时当前账号仍然保持可用；
@@ -460,26 +470,30 @@ src/
 - 切换任意阶段中断后可以恢复或安全回滚；
 - Codex App 完全退出和重新打开；
 - app-server 额度查询；
+- `account/read` 暂时返回空账号时的重试；
+- app-server 缺少邮箱时从 ID Token 回退；
 - 登录取消和登录过期；
 - 目标账号不存在或凭证损坏。
 
 ### 9.3 手工验收
 
 1. 添加 A，列表能看到账号邮箱和套餐；
-2. 登录 B，列表能看到 A/B；
-3. 退出 App 后切换到 B；
-4. 重新打开 App，确认 Profile 显示 B；
-5. 使用 B 一次任务；
-6. 再次退出 App 并切回 A；
-7. 确认 A 仍然可以正常登录和运行；
-8. purge B 后，列表和账号仓库不再保留 B 的凭证；
-9. 验证共享项目、会话和插件未被误删。
+2. Codex App 运行时点击菜单栏“导入当前账号”，输入别名后能完成导入；
+3. 登录 B，列表能看到 A/B；
+4. 退出 App 后切换到 B；
+5. 重新打开 App，确认 Profile 显示 B；
+6. 使用 B 一次任务；
+7. 再次退出 App 并切回 A；
+8. 确认 A 仍然可以正常登录和运行；
+9. purge B 后，列表和账号仓库不再保留 B 的凭证；
+10. 验证共享项目、会话和插件未被误删。
 
 ## 10. 验收标准
 
 MVP 完成需要满足：
 
 - 可以导入至少两个文件凭证模式的 ChatGPT/Codex 账号；
+- Codex App 运行时也可以导入当前账号；
 - `account list --refresh` 能展示账号状态和限额信息；
 - `switch` 在 App 未退出时拒绝执行；
 - 切换后 `codex login status` 和 `account/read` 均确认目标账号；
@@ -497,7 +511,7 @@ MVP 完成需要满足：
 | 风险 | 影响 | 应对 |
 |---|---|---|
 | App Server 协议变化 | 额度采集失效 | 按 Codex 版本生成 Schema，保留适配层 |
-| App 未完全退出 | 凭证竞态、切换不生效 | 检测进程并默认拒绝切换 |
+| App 未完全退出 | 切换时凭证竞态、切换不生效 | 仅对 switch 强制检测进程并拒绝切换；account add 只读并允许 App 运行 |
 | refresh token 轮换 | 保存副本过期 | 切换前先同步当前全局 `auth.json` |
 | Keychain 凭证模式 | 无法直接替换文件 | MVP 明确限制为 file store |
 | 共享 SQLite 状态 | 会话和账号混用 | 只切换认证，不删除共享状态，并在 UI 中说明 |
