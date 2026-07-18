@@ -243,7 +243,6 @@ export function switchAccount(options: SwitchAccountOptions): SwitchAccountResul
       );
     }
 
-    ensurePrivateDirectory(targetDirectory);
     const targetMetadataFingerprint = readStoredFingerprint(poolHome, alias);
     assertRegularPrivateSourceFile(targetAuthPath);
     const targetIdentity = parseAuthIdentity(readFileSync(targetAuthPath, "utf8"));

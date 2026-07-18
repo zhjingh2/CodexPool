@@ -189,6 +189,29 @@ test("refuses to switch while Codex processes are running", () => {
   }
 });
 
+test("does not create an empty account directory when the target is missing", () => {
+  const environment = createEnvironment();
+  try {
+    addAccounts(environment);
+    const missingDirectory = join(environment.poolHome, "accounts", "company");
+    assert.equal(existsSync(missingDirectory), false);
+    assert.throws(
+      () =>
+        switchAccount({
+          alias: "company",
+          env: { CODEX_HOME: environment.codexHome, CODEX_POOL_HOME: environment.poolHome },
+          userHome: environment.root,
+          processList: () => "",
+          loginStatus: () => true,
+        }),
+      (error: unknown) => error instanceof AccountStoreError && error.code === "CORRUPT_ACCOUNT_STORE",
+    );
+    assert.equal(existsSync(missingDirectory), false);
+  } finally {
+    environment.cleanup();
+  }
+});
+
 test("recovers an unfinished switch journal before the next switch", () => {
   const environment = createEnvironment();
   try {
