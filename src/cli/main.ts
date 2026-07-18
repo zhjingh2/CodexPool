@@ -9,6 +9,7 @@ import { switchAccount } from "../auth-swap/index.js";
 import { runDoctor } from "../preflight/doctor.js";
 import { renderDoctorReport } from "../preflight/render.js";
 import { loginAccount } from "../runtime/index.js";
+import { refreshAccount } from "../usage/index.js";
 
 const HELP = `Codex Pool
 
@@ -16,13 +17,38 @@ Usage:
   codex-pool doctor [--json]
   codex-pool account add <alias> [--json]
   codex-pool account login <alias>
-  codex-pool account list [--json]
+  codex-pool account list [--refresh] [--json]
   codex-pool switch <alias>
   codex-pool --help
   codex-pool --version
 `;
 
-function main(args: string[]): number {
+function renderAccounts(accounts: ReturnType<typeof listAccounts>, json: boolean): string {
+  if (json) {
+    return `${JSON.stringify(accounts, null, 2)}\n`;
+  }
+  if (accounts.length === 0) {
+    return "账号池为空，请先使用 account add 或 account login。\n";
+  }
+  const lines = ["别名\t套餐\t状态\t凭证\t当前\t短期额度\t短期重置"];
+  for (const account of accounts) {
+    const plan = account.planType ?? "未查询";
+    const status = account.credentialStatus === "ok" ? "可用" : "异常";
+    const credential = account.credentialStatus === "ok" ? "正常" : account.credentialMessage ?? "需检查";
+    const quota = account.primaryQuota
+      ? `剩余 ${account.primaryQuota.remainingPercent}%`
+      : "未查询";
+    const reset = account.primaryQuota?.resetsAt
+      ? new Date(account.primaryQuota.resetsAt * 1000).toLocaleString()
+      : "未查询";
+    lines.push(
+      `${account.alias}\t${plan}\t${status}\t${credential}\t${account.current ? "✓" : "-"}\t${quota}\t${reset}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+async function main(args: string[]): Promise<number> {
   const [command, ...options] = args;
 
   if (!command || command === "--help" || command === "-h") {
@@ -54,31 +80,31 @@ function main(args: string[]): number {
   if (command === "account") {
     const [action, alias, ...accountOptions] = options;
     if (action === "list") {
-      const unknownOption = (alias ? [alias, ...accountOptions] : accountOptions).find(
-        (option) => option !== "--json",
+      const listOptions = (alias ? [alias, ...accountOptions] : accountOptions);
+      const unknownOption = listOptions.find(
+        (option) => option !== "--json" && option !== "--refresh",
       );
       if (unknownOption) {
         process.stderr.write(`Unknown option: ${unknownOption}\n`);
         return 2;
       }
       try {
-        const accounts = listAccounts();
-        if (accountOptions.includes("--json") || alias === "--json") {
-          process.stdout.write(`${JSON.stringify(accounts, null, 2)}\n`);
-        } else if (accounts.length === 0) {
-          process.stdout.write("账号池为空，请先使用 account add 或 account login。\n");
-        } else {
-          process.stdout.write("别名\t套餐\t状态\t凭证\t当前\t额度\n");
-          for (const account of accounts) {
-            const plan = account.planType ?? "未查询";
-            const status = account.credentialStatus === "ok" ? "可用" : "异常";
-            const credential = account.credentialStatus === "ok" ? "正常" : account.credentialMessage ?? "需检查";
-            process.stdout.write(
-              `${account.alias}\t${plan}\t${status}\t${credential}\t${account.current ? "✓" : "-"}\t未查询\n`,
-            );
+        const json = listOptions.includes("--json");
+        const refresh = listOptions.includes("--refresh");
+        let refreshFailed = false;
+        if (refresh) {
+          for (const account of listAccounts()) {
+            try {
+              await refreshAccount({ alias: account.alias });
+            } catch (error) {
+              refreshFailed = true;
+              const message = error instanceof Error ? error.message : "未知错误";
+              process.stderr.write(`账号 ${account.alias} 刷新失败：${message}\n`);
+            }
           }
         }
-        return 0;
+        process.stdout.write(renderAccounts(listAccounts(), json));
+        return refreshFailed ? 1 : 0;
       } catch (error) {
         if (error instanceof AccountStoreError) {
           process.stderr.write(`账号列表读取失败：${error.message}\n`);
@@ -92,7 +118,7 @@ function main(args: string[]): number {
       process.stderr.write(
         "Usage: codex-pool account add <alias> [--json]\n" +
           "       codex-pool account login <alias>\n" +
-          "       codex-pool account list [--json]\n",
+          "       codex-pool account list [--refresh] [--json]\n",
       );
       return 2;
     }
@@ -164,4 +190,6 @@ function main(args: string[]): number {
   return 2;
 }
 
-process.exitCode = main(process.argv.slice(2));
+void main(process.argv.slice(2)).then((exitCode) => {
+  process.exitCode = exitCode;
+});

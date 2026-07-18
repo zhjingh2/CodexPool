@@ -58,6 +58,7 @@ node dist/src/cli/main.js switch company
 ```bash
 node dist/src/cli/main.js account list
 node dist/src/cli/main.js account list --json
+node dist/src/cli/main.js account list --refresh
 ```
 
-当前列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；额度和重置时间会在后续 app-server 采集阶段接入，暂显示为“未查询”。
+默认列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；`--refresh` 会为每个账号创建隔离临时 `CODEX_HOME`，启动短生命周期 app-server，查询套餐、额度、重置时间和用量后更新缓存。

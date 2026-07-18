@@ -17,7 +17,7 @@ export interface ListAccountsOptions {
   userHome?: string;
 }
 
-function parseMetadata(text: string, alias: string): AccountMetadata {
+export function parseAccountMetadata(text: string, alias: string): AccountMetadata {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -47,6 +47,17 @@ function parseMetadata(text: string, alias: string): AccountMetadata {
     );
   }
   return metadata as AccountMetadata;
+}
+
+export function readAccountMetadata(accountDirectory: string, alias: string): AccountMetadata {
+  const metadataPath = join(accountDirectory, "metadata.json");
+  if (!existsSync(metadataPath)) {
+    throw new AccountStoreError(
+      "CORRUPT_ACCOUNT_STORE",
+      `账号 ${alias} 缺少 metadata.json，请先修复账号仓库`,
+    );
+  }
+  return parseAccountMetadata(readFileSync(metadataPath, "utf8"), alias);
 }
 
 function readActiveAlias(poolHome: string): string | null {
@@ -110,14 +121,7 @@ export function listAccounts(options: ListAccountsOptions = {}): AccountSummary[
     }
     const alias = validateAccountAlias(entry.name);
     const accountDirectory = join(accountsRoot, alias);
-    const metadataPath = join(accountDirectory, "metadata.json");
-    if (!existsSync(metadataPath)) {
-      throw new AccountStoreError(
-        "CORRUPT_ACCOUNT_STORE",
-        `账号 ${alias} 缺少 metadata.json，请先修复账号仓库`,
-      );
-    }
-    const metadata = parseMetadata(readFileSync(metadataPath, "utf8"), alias);
+    const metadata = readAccountMetadata(accountDirectory, alias);
     const credential = inspectCredential(accountDirectory, metadata);
     accounts.push({
       ...metadata,
