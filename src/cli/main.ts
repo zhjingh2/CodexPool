@@ -36,7 +36,7 @@ function renderAccounts(accounts: ReturnType<typeof listAccounts>, json: boolean
   if (accounts.length === 0) {
     return "账号池为空，请先使用 account add 或 account login。\n";
   }
-  const lines = ["别名\t套餐\t状态\t凭证\t当前\t短期额度\t短期重置"];
+  const lines = ["别名\t套餐\t状态\t凭证\t用量\t当前\t短期额度\t短期重置"];
   for (const account of accounts) {
     const plan = account.planType ?? "未查询";
     const status = account.credentialStatus === "ok" ? "可用" : "异常";
@@ -47,8 +47,13 @@ function renderAccounts(accounts: ReturnType<typeof listAccounts>, json: boolean
     const reset = account.primaryQuota?.resetsAt
       ? new Date(account.primaryQuota.resetsAt * 1000).toLocaleString()
       : "未查询";
+    const usage = account.usageStatus === "available"
+      ? "可用"
+      : account.usageStatus === "unavailable"
+        ? "暂不可用"
+        : "未查询";
     lines.push(
-      `${account.alias}\t${plan}\t${status}\t${credential}\t${account.current ? "✓" : "-"}\t${quota}\t${reset}`,
+      `${account.alias}\t${plan}\t${status}\t${credential}\t${usage}\t${account.current ? "✓" : "-"}\t${quota}\t${reset}`,
     );
   }
   return `${lines.join("\n")}\n`;
@@ -101,7 +106,12 @@ async function main(args: string[]): Promise<number> {
         if (refresh) {
           for (const account of listAccounts()) {
             try {
-              await refreshAccount({ alias: account.alias });
+              const snapshot = await refreshAccount({ alias: account.alias });
+              if (snapshot.usageStatus === "unavailable") {
+                process.stderr.write(
+                  `账号 ${account.alias} token 用量暂不可用，套餐和额度已更新。\n`,
+                );
+              }
             } catch (error) {
               refreshFailed = true;
               const message = error instanceof Error ? error.message : "未知错误";

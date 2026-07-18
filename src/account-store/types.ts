@@ -10,6 +10,8 @@ export interface AccountMetadata {
   primaryQuota?: AccountQuotaWindow | null;
   secondaryQuota?: AccountQuotaWindow | null;
   lastRefreshedAt?: string | null;
+  usageStatus?: "available" | "unavailable";
+  usageMessage?: string | null;
 }
 
 export interface AddAccountResult {
@@ -36,6 +38,8 @@ export interface AccountSummary extends AccountMetadata {
   primaryQuota?: AccountQuotaWindow | null;
   secondaryQuota?: AccountQuotaWindow | null;
   lastRefreshedAt?: string | null;
+  usageStatus?: "available" | "unavailable";
+  usageMessage?: string | null;
 }
 
 export interface ParsedAuthIdentity {

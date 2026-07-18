@@ -67,6 +67,8 @@ function updateMetadata(
     primaryQuota: snapshot.primary,
     secondaryQuota: snapshot.secondary,
     lastRefreshedAt: snapshot.fetchedAt,
+    usageStatus: snapshot.usageStatus,
+    usageMessage: snapshot.usageError,
   };
   writePrivateFileAtomically(
     join(accountDirectory, "metadata.json"),

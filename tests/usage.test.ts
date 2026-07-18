@@ -82,6 +82,8 @@ test("refreshes an account in an isolated runtime and persists safe quota metada
             longestStreakDays: 1,
           },
           dailyUsageBuckets: [{ startDate: "2026-07-17", tokens: 15022720 }],
+          usageStatus: "available",
+          usageError: null,
           fetchedAt: "2026-07-18T12:00:00.000Z",
         };
       },
@@ -94,6 +96,7 @@ test("refreshes an account in an isolated runtime and persists safe quota metada
     assert.equal(account?.planType, "pro");
     assert.equal(account?.primaryQuota?.remainingPercent, 76);
     assert.equal(account?.lastRefreshedAt, "2026-07-18T12:00:00.000Z");
+    assert.equal(account?.usageStatus, "available");
     assert.deepEqual(readdirSync(join(environment.poolHome, "runtime", "work")), []);
     assert.equal(existsSync(join(environment.poolHome, "pool.lock")), false);
   } finally {

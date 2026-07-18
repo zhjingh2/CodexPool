@@ -70,7 +70,7 @@ node dist/src/cli/main.js account list --json
 node dist/src/cli/main.js account list --refresh
 ```
 
-默认列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；`--refresh` 会为每个账号创建隔离临时 `CODEX_HOME`，启动短生命周期 app-server，查询套餐、额度、重置时间和用量后更新缓存。
+默认列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；`--refresh` 会为每个账号创建隔离临时 `CODEX_HOME`，启动短生命周期 app-server，查询套餐、额度、重置时间和用量后更新缓存。如果 token 用量档案暂时不可用，套餐和额度仍会更新，用量状态显示为“暂不可用”。
 
 ## 永久清理账号
 

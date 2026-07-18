@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { AccountStoreError } from "../account-store/errors.js";
+import { redactSensitiveText } from "../security/redact.js";
 
 export interface RateLimitWindow {
   usedPercent: number;
@@ -27,6 +28,8 @@ export interface AccountSnapshot {
   secondary: RateLimitWindow | null;
   usage: AccountUsageSummary | null;
   dailyUsageBuckets: AccountUsageBucket[] | null;
+  usageStatus: "available" | "unavailable";
+  usageError: string | null;
   fetchedAt: string;
 }
 
@@ -66,6 +69,9 @@ function parseWindow(value: unknown): RateLimitWindow | null {
 }
 
 function parseAccountResponse(value: unknown): { email: string | null; planType: string | null } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { email: null, planType: null };
+  }
   const response = value as { account?: unknown };
   if (!response.account || typeof response.account !== "object") {
     return { email: null, planType: null };
@@ -82,6 +88,9 @@ function parseRateLimitsResponse(value: unknown): {
   secondary: RateLimitWindow | null;
   planType: string | null;
 } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { primary: null, secondary: null, planType: null };
+  }
   const response = value as { rateLimits?: unknown };
   const rateLimits = response.rateLimits as {
     primary?: unknown;
@@ -99,6 +108,9 @@ function parseUsageResponse(value: unknown): {
   usage: AccountUsageSummary | null;
   dailyUsageBuckets: AccountUsageBucket[] | null;
 } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { usage: null, dailyUsageBuckets: null };
+  }
   const response = value as {
     summary?: Record<string, unknown>;
     dailyUsageBuckets?: unknown;
@@ -146,6 +158,8 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
     const responses = new Map<number, unknown>();
     let buffer = "";
     let settled = false;
+    let usageError: string | null = null;
+    let usageGraceTimer: NodeJS.Timeout | undefined;
     const timer = setTimeout(() => {
       finish(new AccountStoreError("APP_SERVER_TIMEOUT", "app-server 查询超时"));
     }, timeoutMs);
@@ -154,6 +168,7 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (usageGraceTimer) clearTimeout(usageGraceTimer);
       child.kill("SIGTERM");
       if (error) {
         reject(error);
@@ -169,13 +184,20 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
         secondary: limits.secondary,
         usage: usage.usage,
         dailyUsageBuckets: usage.dailyUsageBuckets,
+        usageStatus: usageError === null ? "available" : "unavailable",
+        usageError,
         fetchedAt: new Date().toISOString(),
       });
     };
 
     child.on("error", (error) => finish(new AccountStoreError("APP_SERVER_UNAVAILABLE", error.message)));
     child.on("exit", (code) => {
-      if (!settled && responses.size < 3) {
+      if (settled) return;
+      if (responses.has(2) && responses.has(3)) {
+        usageError ??= "account/usage/read 未返回结果";
+        responses.set(4, null);
+        finish();
+      } else {
         finish(new AccountStoreError("APP_SERVER_EXITED", `app-server 异常退出（${code ?? "未知状态"}）`));
       }
     });
@@ -196,10 +218,18 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
         }
         if (message.id === undefined) continue;
         if (message.error) {
-          finish(rpcError(message, message.id === 2 ? "account/read" : message.id === 3 ? "account/rateLimits/read" : "account/usage/read"));
-          return;
+          if (message.id === 4) {
+            usageError = redactSensitiveText(
+              message.error.message ?? "未知 app-server 错误",
+            );
+            responses.set(4, null);
+          } else {
+            finish(rpcError(message, message.id === 2 ? "account/read" : message.id === 3 ? "account/rateLimits/read" : "initialize"));
+            return;
+          }
+        } else {
+          responses.set(message.id, message.result);
         }
-        responses.set(message.id, message.result);
         if (message.id === 1) {
           child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "initialized", params: {} })}\n`);
           for (const [id, method, params] of [
@@ -213,6 +243,13 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
         if (responses.has(2) && responses.has(3) && responses.has(4)) {
           finish();
           return;
+        }
+        if (responses.has(2) && responses.has(3) && !usageGraceTimer) {
+          usageGraceTimer = setTimeout(() => {
+            usageError = "account/usage/read 暂时不可用";
+            responses.set(4, null);
+            finish();
+          }, Math.min(3_000, timeoutMs));
         }
       }
     });
