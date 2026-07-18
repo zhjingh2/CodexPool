@@ -88,6 +88,7 @@ private enum PoolDiagnostics {
             return arguments.contains("--refresh") ? "account-list-refresh" : "account-list"
         }
         if arguments.starts(with: ["account", "add"]) { return "account-add" }
+        if arguments.starts(with: ["account", "login"]) { return "account-login" }
         if arguments.starts(with: ["account", "rename"]) { return "account-rename" }
         if arguments.starts(with: ["account", "purge"]) { return "account-purge" }
         if arguments.first == "switch" { return "switch" }
@@ -239,6 +240,8 @@ private final class PoolModel: ObservableObject {
     @Published var message: String?
     @Published var error: String?
 
+    var canSwitchAccount: Bool { !isLoading && !isRefreshing }
+
     private static let refreshTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -298,43 +301,43 @@ private final class PoolModel: ObservableObject {
         }
     }
 
-    func addCurrentAccount(alias: String) {
+    private func randomAccountAlias() -> String {
+        let adjectives = ["bright", "calm", "clever", "fresh", "happy", "lucky", "swift", "warm"]
+        let nouns = ["bear", "falcon", "fox", "koala", "otter", "panda", "tiger", "whale"]
+        let existingAliases = Set(accounts.map { $0.alias.lowercased() })
+
+        for _ in 0..<10 {
+            let suffix = UUID().uuidString.prefix(4).lowercased()
+            let alias = "\(adjectives.randomElement()!)-\(nouns.randomElement()!)-\(suffix)"
+            if !existingAliases.contains(alias) {
+                return alias
+            }
+        }
+
+        return "account-\(UUID().uuidString.prefix(8).lowercased())"
+    }
+
+    func loginNewAccount() {
         guard !isLoading else { return }
-        let normalizedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedAlias.isEmpty else { return }
+        let alias = randomAccountAlias()
         isLoading = true
         isRefreshing = false
         error = nil
-        message = "正在导入当前账号…"
+        message = "正在登录新账号…"
         Task {
-            let result = await PoolCLI.run(arguments: ["account", "add", normalizedAlias, "--json"])
+            let result = await PoolCLI.run(arguments: ["account", "login", alias])
             await MainActor.run {
                 self.isLoading = false
                 if result.exitCode == 0 {
-                    self.message = "已将当前账号导入为 \(normalizedAlias)"
+                    self.message = "已添加新账号 \(alias)"
                     self.load()
                 } else {
                     let detail = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if detail.contains("已存在") || detail.contains("已经存在") || detail.contains("已经保存") {
-                        self.message = "账号已存在，无需重复导入"
-                        self.error = nil
-                    } else {
-                        self.message = nil
-                        self.error = detail.isEmpty ? "账号导入失败" : detail
-                    }
+                    self.message = nil
+                    self.error = detail.isEmpty ? "新账号登录失败" : detail
                 }
             }
         }
-    }
-
-    func addCurrentAccount() {
-        guard let email = accounts.first(where: { $0.current })?.email,
-              !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            error = "当前账号邮箱未刷新，请先点击刷新按钮"
-            message = nil
-            return
-        }
-        addCurrentAccount(alias: email)
     }
 
     func renameAccount(_ account: PoolAccount, to alias: String) {
@@ -446,7 +449,7 @@ private struct ContentView: View {
             }
             Spacer()
             Button {
-                model.addCurrentAccount()
+                model.loginNewAccount()
             } label: {
                 Image(systemName: "person.badge.plus")
                     .font(.system(size: 14, weight: .semibold))
@@ -456,7 +459,7 @@ private struct ContentView: View {
             }
             .buttonStyle(.plain)
             .disabled(model.isLoading)
-            .help("按当前账号邮箱导入 Codex 账号")
+            .help("登录并添加新 Codex 账号")
             Button {
                 model.load(refresh: true)
             } label: {
@@ -536,12 +539,13 @@ private struct ContentView: View {
                         model.switchAccount(account)
                     }
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(model.canSwitchAccount ? .black : .white.opacity(0.45))
                     .padding(.horizontal, 11)
                     .padding(.vertical, 6)
-                    .background(aqua, in: Capsule())
+                    .background((model.canSwitchAccount ? aqua : Color.white.opacity(0.16)), in: Capsule())
                     .buttonStyle(.plain)
-                    .disabled(model.isLoading)
+                    .disabled(!model.canSwitchAccount)
+                    .help(model.canSwitchAccount ? "切换到此账号" : "刷新或其他账号操作进行中，暂不可切换")
                 }
                 accountActions(for: account)
             }
