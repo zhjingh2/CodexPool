@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { AccountStoreError } from "./errors.js";
 
 const ACCOUNT_ALIAS_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/u;
-const RESERVED_ALIASES = new Set([".", "..", "runtime", "handoffs", "accounts"]);
+const RESERVED_ALIASES = new Set([".", "..", "runtime", "accounts"]);
 
 export function validateAccountAlias(alias: string): string {
   const normalized = alias.trim();
@@ -33,4 +33,3 @@ export function getAccountDirectory(poolHome: string, alias: string): string {
   }
   return accountDirectory;
 }
-

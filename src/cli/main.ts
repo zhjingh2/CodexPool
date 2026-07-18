@@ -24,7 +24,7 @@ Usage:
   codex-pool account list [--refresh] [--json]
   codex-pool account rename <from> <to>
   codex-pool account purge <alias>
-  codex-pool switch <alias>
+  codex-pool switch <alias> [--launch]
   codex-pool --help
   codex-pool --version
 `;
@@ -226,18 +226,22 @@ async function main(args: string[]): Promise<number> {
 
   if (command === "switch") {
     const [alias, ...switchOptions] = options;
-    if (!alias || switchOptions.length > 0) {
-      process.stderr.write("Usage: codex-pool switch <alias>\n");
+    if (!alias || switchOptions.length > 1 || switchOptions.some((option) => option !== "--launch")) {
+      process.stderr.write("Usage: codex-pool switch <alias> [--launch]\n");
       return 2;
     }
     try {
-      const result = switchAccount({ alias });
+      const result = switchAccount({ alias, ...(switchOptions.includes("--launch") ? { launch: true } : {}) });
       const previous = result.previousAlias ? `（原账号：${result.previousAlias}）` : "";
       process.stdout.write(`已切换到 Codex 账号 ${result.alias}${previous}。\n`);
       return 0;
     } catch (error) {
       if (error instanceof AccountStoreError) {
-        process.stderr.write(`账号切换失败：${error.message}\n`);
+        process.stderr.write(
+          error.code === "APP_LAUNCH_FAILED"
+            ? `账号切换完成，但 Codex App 启动失败：${error.message}\n`
+            : `账号切换失败：${error.message}\n`,
+        );
         return 1;
       }
       process.stderr.write("账号切换失败：发生未预期错误，当前账号可能未改变。\n");

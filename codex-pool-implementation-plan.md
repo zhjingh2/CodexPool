@@ -3,7 +3,7 @@
 **版本**：MVP v0.1  
 **目标平台**：macOS 优先  
 **核心模式**：冷切换全局 `~/.codex/auth.json`  
-**文档状态**：实现前方案
+**文档状态**：MVP 核心功能实现中
 
 ## 1. 项目概述
 
@@ -30,7 +30,6 @@ Codex Pool 是一个本地账号管理工具，用于管理多个 Codex/ChatGPT 
 - 在切换前保存当前账号最新凭证，避免 token 刷新丢失；
 - 原子地替换全局 `~/.codex/auth.json`；
 - 切换后验证目标账号并提供清晰错误信息；
-- 通过本地 handoff 保存任务上下文，使切换账号后可以继续同一个编码任务；
 - 账号凭证只保存在本机，不上传到服务端。
 
 ### 2.2 非目标
@@ -40,7 +39,6 @@ Codex Pool 是一个本地账号管理工具，用于管理多个 Codex/ChatGPT 
 - 不通过 Plugin、MCP 或浏览器自动化替换宿主认证；
 - 不实现多账号自动轮换或绕过平台限制；
 - 不保证显示精确的“剩余 token 数”，只显示后端提供的额度百分比和重置时间；
-- 不保证跨账号恢复同一个远端 thread ID 或完整的后端会话历史；
 - 不删除账号关联的全部 Codex 会话、项目、worktree 或日志。
 
 ## 3. 已知运行环境
@@ -74,7 +72,6 @@ cli_auth_credentials_store = "file"
 ├── config.json
 ├── active-account
 ├── switch-journal.json
-├── handoffs/
 ├── runtime/
 └── accounts/
     ├── work/
@@ -178,64 +175,6 @@ Journal 至少记录：
 - 状态无法判断：停止操作并要求用户手动确认，不得盲目覆盖凭证。
 
 `active-account` 只能作为显示缓存，不能作为认证事实来源；真实当前账号必须以 `auth.json` 经 `account/read` 验证后的结果为准。
-
-### 4.2.2 任务连续性与 handoff
-
-冷切换会关闭当前 Codex App 并更换认证上下文，因此 MVP 不承诺 B 账号能够直接恢复 A 账号的同一个远端 thread。为了让用户继续做同一个任务，工具应在切换前生成本地 handoff 文件。
-
-建议目录：
-
-```text
-~/.codex-pool/handoffs/
-└── <timestamp>-<project>-<thread>.md
-```
-
-handoff 至少包含：
-
-```markdown
-# Codex 任务交接
-
-## 原账号和原 thread
-- 原账号：仅保存本地别名，不保存 token
-- 原 thread：保存本地 thread ID，不能保证跨账号恢复
-
-## 当前目标
-<!-- 当前任务要完成什么 -->
-
-## 已完成
-<!-- 已完成的代码、命令和验证 -->
-
-## 当前状态
-<!-- 未提交修改、失败测试、阻塞点 -->
-
-## 下一步
-<!-- 新账号应继续执行的动作 -->
-
-## 相关文件
-<!-- 文件路径、Git diff 和项目目录 -->
-```
-
-handoff 可以由当前 Codex 会话生成，也可以由 Codex Pool 根据本地 thread、Git diff 和最近任务记录整理。凭证、Cookie 和完整 access token 不得写入 handoff。
-
-切换后的连续性流程：
-
-```text
-检测当前任务是否有未完成 turn
-    ↓
-生成并保存 handoff
-    ↓
-完成账号冷切换
-    ↓
-重新打开 Codex App
-    ↓
-创建新 thread
-    ↓
-将 handoff 附加为新任务上下文
-```
-
-在官方桌面 Codex App 中，MVP 不假设存在可调用的“自动注入首条消息”接口。因此桌面 App 模式下至少要保存 handoff 路径并提供复制内容，用户打开新 thread 后手动加载；只有 Codex Pool 自己的 app-server 客户端，才可以自动创建新 thread 并附加 handoff。
-
-如果未来验证 `thread/resume` 在目标账号下可用，可以先尝试恢复原 thread；失败时必须自动降级为“新 thread + handoff”，不能把跨账号 thread 恢复作为唯一方案。
 
 ### 4.3 状态采集
 
@@ -343,18 +282,14 @@ personal   Plus    耗尽    剩余 0%     今天 18:45     剩余 27%    -
 - 不删除共享的 Codex 会话、SQLite 状态、项目和插件；
 - 完成后提示：之后只能重新执行官方登录。
 
-### 5.6 `codex-pool switch company [--handoff]`
+### 5.6 `codex-pool switch company [--launch]`
 
-冷切换全局 Codex 登录到 `company`，默认不自动启动 Codex App；指定 `--handoff` 时，在切换前保存任务上下文。
+冷切换全局 Codex 登录到 `company`，默认不自动启动 Codex App；指定 `--launch` 时，只有认证切换事务完整提交后才启动 Codex App。默认通过 `open -a ChatGPT` 启动，可用 `CODEX_APP_NAME` 覆盖应用名称。
 
 执行流程：
 
 ```text
 检查目标账号存在且可用
-        ↓
-检测当前是否存在未完成任务
-        ↓
-生成 handoff（使用 --handoff 时）
         ↓
 检查 Codex App/app-server 是否退出
         ↓
@@ -375,11 +310,13 @@ personal   Plus    耗尽    剩余 0%     今天 18:45     剩余 27%    -
 更新 active-account
         ↓
 释放锁
+        ↓
+使用 --launch 时通过 macOS open 启动 Codex App
 ```
 
 如果 App 仍在运行，应拒绝切换并说明原因，而不是强制覆盖凭证。
 
-如果当前存在未完成 turn 且未指定 `--handoff`，MVP 可以提示用户确认是否继续；默认建议中止切换，避免丢失任务上下文。
+如果 `--launch` 启动失败，账号切换保持已提交状态，不回滚认证文件；工具应提示用户手动打开 Codex App。
 
 ## 6. 冷切换与文件安全
 
@@ -491,7 +428,6 @@ src/
 - app-server 无法启动；
 - 额度接口超时；
 - 临时 CODEX_HOME 创建或清理失败；
-- handoff 生成或保存失败；
 - 切换后账号校验失败；
 - 切换中断或磁盘写入失败；
 - switch journal 残留或与当前 auth.json 不一致；
@@ -510,7 +446,6 @@ src/
 - 原子替换；
 - 切换锁；
 - switch journal 阶段推进和崩溃恢复；
-- handoff 生成、脱敏和恢复提示；
 - 失败回滚；
 - 当前账号保护；
 - purge 确认逻辑。
@@ -523,8 +458,6 @@ src/
 - 登录流程取消时当前账号仍然保持可用；
 - 非当前账号额度刷新不会污染账号凭证目录；
 - 切换任意阶段中断后可以恢复或安全回滚；
-- 切换前能生成不含凭证的 handoff；
-- 切换后新 thread 能读取 handoff 并继续同一个编码任务；
 - Codex App 完全退出和重新打开；
 - app-server 额度查询；
 - 登录取消和登录过期；
@@ -555,8 +488,6 @@ MVP 完成需要满足：
 - refresh token 更新后再次切换仍能成功；
 - 非当前账号刷新不会在账号仓库产生 SQLite、session 或日志文件；
 - 进程崩溃后 `auth.json`、`active-account` 和 switch journal 能恢复到一致状态；
-- handoff 不包含 access token、refresh token、Cookie 或其他认证秘密；
-- 即使跨账号 `thread/resume` 失败，也能通过 handoff 创建新 thread 继续任务；
 - purge 不会误删其他账号和共享 Codex 状态；
 - 凭证不会出现在日志、终端错误信息或元数据中；
 - Codex App 完全退出并重启后能使用切换后的账号。
@@ -583,13 +514,12 @@ codex-pool account login personal
 codex-pool account list [--refresh]
 codex-pool account rename work company
 codex-pool account purge personal
-codex-pool switch company [--handoff] [--launch]
+codex-pool switch company [--launch]
 ```
 
 其中：
 
-- `--handoff` 在切换前保存当前任务上下文；官方桌面 App 模式下提示 handoff 路径并支持复制内容，自有 app-server 客户端模式下可以自动加载；
 - `--launch` 在切换验证成功后自动重新打开 Codex App；
-- 默认 `switch` 不启动 App，也不生成 handoff，方便用户手动控制切换后的工作方式。
+- 默认 `switch` 不启动 App，方便用户手动控制切换后的工作方式。
 
 `remove`、`restore`、`disable`、`enable`、`update` 暂不作为 MVP 命令，等账号数量增加、需要归档和批量管理时再加入。

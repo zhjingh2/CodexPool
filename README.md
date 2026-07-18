@@ -1,6 +1,6 @@
 # Codex Pool
 
-Codex Pool 是一个面向 macOS 的本地 Codex 多账号管理工具。当前实现处于第一阶段，仅包含安全、只读的环境预检。
+Codex Pool 是一个面向 macOS 的本地 Codex 多账号管理工具，支持文件凭证模式下的账号导入、官方登录、额度总览、冷切换和账号清理。
 
 ## 开发
 
@@ -49,9 +49,10 @@ node dist/src/cli/main.js account login personal
 
 ```bash
 node dist/src/cli/main.js switch company
+node dist/src/cli/main.js switch company --launch
 ```
 
-该命令会校验目标账号、备份当前全局 `auth.json`，原子替换凭证，运行 `codex login status` 验证目标账号，再更新 `active-account`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态。
+该命令会校验目标账号、备份当前全局 `auth.json`，原子替换凭证，运行 `codex login status` 验证目标账号，再更新 `active-account`。指定 `--launch` 时，仅在切换事务完成后通过 macOS `open -a ChatGPT` 启动 Codex App；如果启动失败，账号切换不会回滚，需要手动打开 App。若 App 名称不同，可通过 `CODEX_APP_NAME` 覆盖默认的 `ChatGPT`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态。
 
 ## 重命名账号
 

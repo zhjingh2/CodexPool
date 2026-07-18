@@ -96,6 +96,55 @@ test("switches auth.json atomically and updates active-account after verificatio
   }
 });
 
+test("launches Codex App only after a successful switch when requested", () => {
+  const environment = createEnvironment();
+  try {
+    addAccounts(environment);
+    let launched = false;
+    const result = switchAccount({
+      alias: "personal",
+      launch: true,
+      launchApp: () => {
+        launched = true;
+        return true;
+      },
+      env: { CODEX_HOME: environment.codexHome, CODEX_POOL_HOME: environment.poolHome },
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    assert.equal(result.alias, "personal");
+    assert.equal(launched, true);
+    assert.equal(existsSync(join(environment.poolHome, "switch-journal.json")), false);
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("does not roll back a committed switch when App launch fails", () => {
+  const environment = createEnvironment();
+  try {
+    addAccounts(environment);
+    assert.throws(
+      () =>
+        switchAccount({
+          alias: "personal",
+          launch: true,
+          launchApp: () => false,
+          env: { CODEX_HOME: environment.codexHome, CODEX_POOL_HOME: environment.poolHome },
+          userHome: environment.root,
+          processList: () => "",
+          loginStatus: () => true,
+        }),
+      (error: unknown) => error instanceof AccountStoreError && error.code === "APP_LAUNCH_FAILED",
+    );
+    assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "personal\n");
+    assert.equal(readFileSync(join(environment.codexHome, "auth.json"), "utf8"), authText("account-b"));
+  } finally {
+    environment.cleanup();
+  }
+});
+
 test("restores the previous auth and active account when target verification fails", () => {
   const environment = createEnvironment();
   try {

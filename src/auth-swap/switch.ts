@@ -35,11 +35,13 @@ import {
 
 export interface SwitchAccountOptions {
   alias: string;
+  launch?: boolean;
   env?: NodeJS.ProcessEnv;
   userHome?: string;
   now?: () => Date;
   processList?: () => string;
   loginStatus?: (codexHome: string, env: NodeJS.ProcessEnv) => boolean;
+  launchApp?: (env: NodeJS.ProcessEnv) => boolean;
 }
 
 export interface SwitchAccountResult {
@@ -59,6 +61,16 @@ function defaultLoginStatus(codexHome: string, env: NodeJS.ProcessEnv): boolean 
   const result = spawnSync("codex", ["login", "status"], {
     encoding: "utf8",
     env: { ...env, CODEX_HOME: codexHome },
+    timeout: 15_000,
+  });
+  return result.status === 0;
+}
+
+function defaultLaunchApp(env: NodeJS.ProcessEnv): boolean {
+  const appName = env.CODEX_APP_NAME?.trim() || "ChatGPT";
+  const result = spawnSync("open", ["-a", appName], {
+    encoding: "utf8",
+    env,
     timeout: 15_000,
   });
   return result.status === 0;
@@ -209,7 +221,14 @@ export function switchAccount(options: SwitchAccountOptions): SwitchAccountResul
     );
   }
 
-  const releaseLock = acquirePoolLock(poolHome);
+  const releasePoolLock = acquirePoolLock(poolHome);
+  let lockReleased = false;
+  const releaseLock = (): void => {
+    if (!lockReleased) {
+      releasePoolLock();
+      lockReleased = true;
+    }
+  };
   try {
     recoverPendingSwitch({ poolHome, codexHome });
 
@@ -302,6 +321,14 @@ export function switchAccount(options: SwitchAccountOptions): SwitchAccountResul
     journal.phase = "committed";
     writeSwitchJournal(journal);
     finishCommittedJournal(journal);
+    releaseLock();
+
+    if (options.launch && !(options.launchApp ?? defaultLaunchApp)(env)) {
+      throw new AccountStoreError(
+        "APP_LAUNCH_FAILED",
+        "账号已切换成功，但 Codex App 启动失败；请手动打开 Codex App",
+      );
+    }
 
     return {
       alias,
