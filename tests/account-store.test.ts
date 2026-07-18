@@ -71,6 +71,7 @@ function addInTestEnvironment(environment: TestEnvironment, alias: string) {
 
 test("validates account aliases before creating paths", () => {
   assert.equal(validateAccountAlias("work-1"), "work-1");
+  assert.equal(validateAccountAlias("static.tuneup+team@example.com"), "static.tuneup+team@example.com");
   assert.throws(() => validateAccountAlias("../work"), AccountStoreError);
   assert.throws(() => validateAccountAlias("a/b"), AccountStoreError);
   assert.throws(() => validateAccountAlias(""), AccountStoreError);

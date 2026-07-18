@@ -86,4 +86,4 @@ node dist/src/cli/main.js account purge personal
 npm run menu
 ```
 
-菜单栏面板会复用 `codex-pool account list --json`、`account add <alias>` 和 `switch <alias> --launch`，展示当前账号、完整邮箱、套餐、额度和重置时间，并提供导入当前账号、刷新、切换和打开 Codex App 入口。导入按钮会要求输入账号别名；如果别名或当前账号已存在，会在面板中提示无需重复导入，导入当前账号不要求退出 Codex App。默认从当前项目的 `dist/src/cli/main.js` 读取 CLI；如果作为独立应用启动，可设置 `CODEX_POOL_ROOT` 或 `CODEX_POOL_CLI` 指向项目和 CLI 路径。菜单栏图标位于 `macos/assets/codex-pool-account.png`，缺少资源时自动回退到 SF Symbol。完整邮箱在成功刷新账号信息后写入本地元数据，刷新未成功时显示“邮箱未刷新”，不会回退显示掩码邮箱。
+菜单栏面板会复用 `codex-pool account list --json`、`account add <alias>` 和 `switch <alias> --launch`，展示当前账号、完整邮箱、套餐、额度和重置时间，并提供导入当前账号、刷新、切换和打开 Codex App 入口。每次打开面板时会自动刷新一次账号额度；面板先显示本地缓存，刷新期间显示转圈状态。导入按钮不弹窗，直接使用当前账号的完整邮箱作为账号别名；如果邮箱尚未刷新，会提示先刷新，如果别名或当前账号已存在，会在面板中提示无需重复导入。导入当前账号不要求退出 Codex App。默认从当前项目的 `dist/src/cli/main.js` 读取 CLI；如果作为独立应用启动，可设置 `CODEX_POOL_ROOT` 或 `CODEX_POOL_CLI` 指向项目和 CLI 路径。菜单栏图标位于 `macos/assets/codex-pool-account.png`，缺少资源时自动回退到 SF Symbol。完整邮箱在成功刷新账号信息后写入本地元数据，刷新未成功时显示“邮箱未刷新”，不会回退显示掩码邮箱。

@@ -196,11 +196,20 @@ private final class PoolModel: ObservableObject {
             }
         }
     }
+
+    func addCurrentAccount() {
+        guard let email = accounts.first(where: { $0.current })?.email,
+              !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            error = "当前账号邮箱未刷新，请先点击刷新按钮"
+            message = nil
+            return
+        }
+        addCurrentAccount(alias: email)
+    }
 }
 
 private struct ContentView: View {
     @ObservedObject var model: PoolModel
-    @State private var showingAddAccount = false
 
     private let background = Color(red: 0.055, green: 0.067, blue: 0.082)
     private let panel = Color(red: 0.09, green: 0.106, blue: 0.13)
@@ -237,7 +246,7 @@ private struct ContentView: View {
             }
             Spacer()
             Button {
-                showingAddAccount = true
+                model.addCurrentAccount()
             } label: {
                 Image(systemName: "person.badge.plus")
                     .font(.system(size: 14, weight: .semibold))
@@ -247,7 +256,7 @@ private struct ContentView: View {
             }
             .buttonStyle(.plain)
             .disabled(model.isLoading)
-            .help("导入当前登录的 Codex 账号")
+            .help("按当前账号邮箱导入 Codex 账号")
             Button {
                 model.load(refresh: true)
             } label: {
@@ -272,11 +281,6 @@ private struct ContentView: View {
         .padding(.horizontal, 18)
         .padding(.top, 18)
         .padding(.bottom, 14)
-        .sheet(isPresented: $showingAddAccount) {
-            AddAccountSheet { alias in
-                model.addCurrentAccount(alias: alias)
-            }
-        }
     }
 
     private var accountSection: some View {
@@ -425,42 +429,6 @@ private struct ContentView: View {
     }
 }
 
-private struct AddAccountSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var alias = ""
-    let onSubmit: (String) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("导入当前 Codex 账号")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-            Text("请输入账号别名。若账号或别名已在账号池中，系统会提示无需重复导入。")
-                .font(.system(size: 11, design: .rounded))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            TextField("例如 work 或 personal", text: $alias)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(submit)
-            HStack {
-                Spacer()
-                Button("取消") { dismiss() }
-                Button("导入") { submit() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 340)
-    }
-
-    private func submit() {
-        let normalizedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedAlias.isEmpty else { return }
-        onSubmit(normalizedAlias)
-        dismiss()
-    }
-}
-
 private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = PoolModel()
     private let popover = NSPopover()
@@ -496,6 +464,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
+            model.load(refresh: true)
         }
     }
 }
