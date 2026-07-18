@@ -60,6 +60,7 @@ export function loginAccount(options: LoginAccountOptions): AddAccountResult {
       alias,
       authHome: runtimeDirectory,
       poolHome,
+      setActiveAccount: false,
     };
     if (options.now) {
       return importAccountFromHome({ ...importOptions, now: options.now });

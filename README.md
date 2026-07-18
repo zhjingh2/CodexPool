@@ -42,3 +42,13 @@ node dist/src/cli/main.js account login personal
 ```
 
 该命令会在 `~/.codex-pool/runtime/login/` 下创建临时 `CODEX_HOME`，调用官方 `codex login`。登录取消或失败时不会清理当前全局账号；成功后才会导入新账号，并删除临时目录。
+
+## 冷切换账号
+
+退出 Codex App 和 app-server 后执行：
+
+```bash
+node dist/src/cli/main.js switch company
+```
+
+该命令会校验目标账号、备份当前全局 `auth.json`，原子替换凭证，运行 `codex login status` 验证目标账号，再更新 `active-account`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态。

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { AccountStoreError, addCurrentAccount } from "../account-store/index.js";
+import { switchAccount } from "../auth-swap/index.js";
 import { runDoctor } from "../preflight/doctor.js";
 import { renderDoctorReport } from "../preflight/render.js";
 import { loginAccount } from "../runtime/index.js";
@@ -11,6 +12,7 @@ Usage:
   codex-pool doctor [--json]
   codex-pool account add <alias> [--json]
   codex-pool account login <alias>
+  codex-pool switch <alias>
   codex-pool --help
   codex-pool --version
 `;
@@ -92,6 +94,27 @@ function main(args: string[]): number {
         return 1;
       }
       process.stderr.write("账号导入失败：发生未预期错误，未写入账号凭证。\n");
+      return 1;
+    }
+  }
+
+  if (command === "switch") {
+    const [alias, ...switchOptions] = options;
+    if (!alias || switchOptions.length > 0) {
+      process.stderr.write("Usage: codex-pool switch <alias>\n");
+      return 2;
+    }
+    try {
+      const result = switchAccount({ alias });
+      const previous = result.previousAlias ? `（原账号：${result.previousAlias}）` : "";
+      process.stdout.write(`已切换到 Codex 账号 ${result.alias}${previous}。\n`);
+      return 0;
+    } catch (error) {
+      if (error instanceof AccountStoreError) {
+        process.stderr.write(`账号切换失败：${error.message}\n`);
+        return 1;
+      }
+      process.stderr.write("账号切换失败：发生未预期错误，当前账号可能未改变。\n");
       return 1;
     }
   }

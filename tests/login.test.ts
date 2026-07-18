@@ -55,7 +55,7 @@ test("logs into an isolated CODEX_HOME and imports only after success", () => {
       readFileSync(join(environment.poolHome, "accounts", "personal", "auth.json"), "utf8"),
       LOGIN_AUTH,
     );
-    assert.equal(existsSync(join(environment.poolHome, "active-account")), true);
+    assert.equal(existsSync(join(environment.poolHome, "active-account")), false);
     assert.deepEqual(
       readdirSync(join(environment.poolHome, "runtime", "login")),
       [],

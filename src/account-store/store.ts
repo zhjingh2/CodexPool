@@ -35,6 +35,7 @@ export interface ImportAccountOptions {
   authHome: string;
   poolHome: string;
   now?: () => Date;
+  setActiveAccount?: boolean;
 }
 
 function defaultProcessList(): string {
@@ -200,7 +201,9 @@ export function importAccountFromHome(options: ImportAccountOptions): AddAccount
       join(accountDirectory, "metadata.json"),
       `${JSON.stringify(metadata, null, 2)}\n`,
     );
-    writePrivateFileAtomically(join(options.poolHome, "active-account"), `${alias}\n`);
+    if (options.setActiveAccount !== false) {
+      writePrivateFileAtomically(join(options.poolHome, "active-account"), `${alias}\n`);
+    }
 
     return {
       alias,

@@ -7,6 +7,7 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readFileSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -77,10 +78,34 @@ export function acquirePoolLock(poolHome: string): () => void {
   try {
     descriptor = openSync(lockPath, "wx", 0o600);
   } catch {
-    throw new AccountStoreError(
-      "POOL_LOCKED",
-      "Codex Pool 正在执行另一个账号操作；如果上次进程异常退出，请先检查 pool.lock",
-    );
+    let stale = false;
+    try {
+      const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: unknown };
+      if (typeof lock.pid === "number" && Number.isInteger(lock.pid) && lock.pid > 0) {
+        try {
+          process.kill(lock.pid, 0);
+        } catch (error) {
+          stale = (error as NodeJS.ErrnoException).code === "ESRCH";
+        }
+      }
+    } catch {
+      stale = false;
+    }
+    if (!stale) {
+      throw new AccountStoreError(
+        "POOL_LOCKED",
+        "Codex Pool 正在执行另一个账号操作；如果上次进程异常退出，请先检查 pool.lock",
+      );
+    }
+    try {
+      unlinkSync(lockPath);
+      descriptor = openSync(lockPath, "wx", 0o600);
+    } catch {
+      throw new AccountStoreError(
+        "POOL_LOCKED",
+        "Codex Pool 正在执行另一个账号操作；如果上次进程异常退出，请先检查 pool.lock",
+      );
+    }
   }
 
   writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`);
