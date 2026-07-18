@@ -3,12 +3,14 @@
 import { AccountStoreError, addCurrentAccount } from "../account-store/index.js";
 import { runDoctor } from "../preflight/doctor.js";
 import { renderDoctorReport } from "../preflight/render.js";
+import { loginAccount } from "../runtime/index.js";
 
 const HELP = `Codex Pool
 
 Usage:
   codex-pool doctor [--json]
   codex-pool account add <alias> [--json]
+  codex-pool account login <alias>
   codex-pool --help
   codex-pool --version
 `;
@@ -44,10 +46,32 @@ function main(args: string[]): number {
 
   if (command === "account") {
     const [action, alias, ...accountOptions] = options;
-    if (action !== "add" || !alias) {
-      process.stderr.write("Usage: codex-pool account add <alias> [--json]\n");
+    if ((action !== "add" && action !== "login") || !alias) {
+      process.stderr.write(
+        "Usage: codex-pool account add <alias> [--json]\n" +
+          "       codex-pool account login <alias>\n",
+      );
       return 2;
     }
+    if (action === "login") {
+      if (accountOptions.length > 0) {
+        process.stderr.write("account login 不接受额外参数\n");
+        return 2;
+      }
+      try {
+        const result = loginAccount({ alias });
+        process.stdout.write(`已将新登录的 Codex 账号保存为 ${result.alias}。\n`);
+        return 0;
+      } catch (error) {
+        if (error instanceof AccountStoreError) {
+          process.stderr.write(`账号登录失败：${error.message}\n`);
+          return 1;
+        }
+        process.stderr.write("账号登录失败：发生未预期错误，当前账号保持不变。\n");
+        return 1;
+      }
+    }
+
     const unknownOption = accountOptions.find((option) => option !== "--json");
     if (unknownOption) {
       process.stderr.write(`Unknown option: ${unknownOption}\n`);

@@ -30,6 +30,13 @@ export interface AddCurrentAccountOptions {
   loginStatus?: (codexHome: string, env: NodeJS.ProcessEnv) => boolean;
 }
 
+export interface ImportAccountOptions {
+  alias: string;
+  authHome: string;
+  poolHome: string;
+  now?: () => Date;
+}
+
 function defaultProcessList(): string {
   const result = spawnSync("ps", ["-axo", "pid=,ppid=,command="], {
     encoding: "utf8",
@@ -108,9 +115,6 @@ export function addCurrentAccount(options: AddCurrentAccountOptions): AddAccount
   const now = options.now ?? (() => new Date());
   const codexHome = resolveCodexHome(env, userHome);
   const poolHome = resolvePoolHome(env, userHome);
-  const accountsRoot = join(poolHome, "accounts");
-  const accountDirectory = getAccountDirectory(poolHome, alias);
-  const authPath = join(codexHome, "auth.json");
   const configPath = join(codexHome, "config.toml");
 
   const running = summarizeCodexProcesses((options.processList ?? defaultProcessList)());
@@ -139,13 +143,27 @@ export function addCurrentAccount(options: AddCurrentAccountOptions): AddAccount
     );
   }
 
+  return importAccountFromHome({
+    alias,
+    authHome: codexHome,
+    poolHome,
+    now,
+  });
+}
+
+export function importAccountFromHome(options: ImportAccountOptions): AddAccountResult {
+  const alias = validateAccountAlias(options.alias);
+  const now = options.now ?? (() => new Date());
+  const authPath = join(options.authHome, "auth.json");
+  const accountDirectory = getAccountDirectory(options.poolHome, alias);
   assertRegularPrivateSourceFile(authPath);
   const authBuffer = readFileSync(authPath);
   const identity = parseAuthIdentity(authBuffer.toString("utf8"));
 
-  ensurePrivateDirectory(poolHome);
+  const accountsRoot = join(options.poolHome, "accounts");
+  ensurePrivateDirectory(options.poolHome);
   ensurePrivateDirectory(accountsRoot);
-  const releaseLock = acquirePoolLock(poolHome);
+  const releaseLock = acquirePoolLock(options.poolHome);
   let accountDirectoryCreated = false;
   try {
     if (existsSync(accountDirectory)) {
@@ -182,7 +200,7 @@ export function addCurrentAccount(options: AddCurrentAccountOptions): AddAccount
       join(accountDirectory, "metadata.json"),
       `${JSON.stringify(metadata, null, 2)}\n`,
     );
-    writePrivateFileAtomically(join(poolHome, "active-account"), `${alias}\n`);
+    writePrivateFileAtomically(join(options.poolHome, "active-account"), `${alias}\n`);
 
     return {
       alias,

@@ -34,3 +34,11 @@ node dist/src/cli/main.js account add work
 ```
 
 该命令要求 `cli_auth_credentials_store = "file"`，并将当前 `auth.json` 原子复制到 `~/.codex-pool/accounts/work/`。账号指纹只保存 SHA-256 哈希，命令不会输出或记录 token。
+
+## 添加新账号
+
+```bash
+node dist/src/cli/main.js account login personal
+```
+
+该命令会在 `~/.codex-pool/runtime/login/` 下创建临时 `CODEX_HOME`，调用官方 `codex login`。登录取消或失败时不会清理当前全局账号；成功后才会导入新账号，并删除临时目录。
