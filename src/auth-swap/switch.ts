@@ -21,6 +21,7 @@ import {
   resolvePoolHome,
   validateAccountAlias,
 } from "../account-store/paths.js";
+import { listAccounts } from "../account-store/list.js";
 import { resolveCodexHome } from "../preflight/doctor.js";
 import { detectCredentialStoreMode } from "../preflight/config.js";
 import { summarizeCodexProcesses } from "../preflight/processes.js";
@@ -220,6 +221,10 @@ export function switchAccount(options: SwitchAccountOptions): SwitchAccountResul
       "Codex App 或 app-server 仍在运行；请完全退出后再切换账号",
     );
   }
+
+  // Codex App/CLI may have changed the global auth.json since the last pool switch.
+  // Reconcile first so an external login does not produce a stale active-account error.
+  listAccounts({ env, userHome });
 
   const releasePoolLock = acquirePoolLock(poolHome);
   let lockReleased = false;

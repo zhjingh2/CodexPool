@@ -57,12 +57,21 @@ test("refreshes an account in an isolated runtime and persists safe quota metada
       processList: () => "",
       loginStatus: () => true,
     });
+    const staleRuntime = join(
+      environment.poolHome,
+      "runtime",
+      "work",
+      "run-11111111-1111-4111-8111-111111111111",
+    );
+    mkdirSync(staleRuntime, { mode: 0o700, recursive: true });
+    writeFileSync(join(staleRuntime, "auth.json"), AUTH_TEXT, { mode: 0o600 });
     const snapshot = await refreshAccount({
       alias: "work",
       env: environment.env,
       userHome: environment.root,
       now: () => new Date("2026-07-18T12:00:00.000Z"),
       query: async ({ codexHome }) => {
+        assert.equal(existsSync(staleRuntime), false);
         assert.equal(readFileSync(join(codexHome, "auth.json"), "utf8"), AUTH_TEXT);
         writeFileSync(join(codexHome, "auth.json"), REFRESHED_AUTH_TEXT, { mode: 0o600 });
         return {

@@ -7,6 +7,7 @@ app_path="$project_root/.build/CodexPoolMemu.app"
 app_resource_root="$app_path/Contents/Resources"
 resource_root="$app_resource_root/codex-pool"
 menu_icon="$project_root/macos/assets/codex-pool-account.png"
+fallback_icon="$project_root/macos/assets/CodexPoolMemu.icns"
 icon_name="CodexPoolMemu.icns"
 icon_work_directory="$(mktemp -d "${TMPDIR:-/tmp}/codex-pool-icon.XXXXXX")"
 
@@ -18,8 +19,10 @@ trap cleanup EXIT
 
 rm -rf "$app_path"
 mkdir -p "$app_path/Contents/MacOS" "$resource_root/dist/src" "$resource_root/macos/assets"
+mkdir -p "$project_root/.build/module-cache"
 
 swiftc -O -parse-as-library \
+  -module-cache-path "$project_root/.build/module-cache" \
   -o "$app_path/Contents/MacOS/CodexPoolMemu" \
   "$project_root/macos/CodexPoolMemu.swift" \
   -framework Cocoa \
@@ -55,7 +58,14 @@ create_icon 512 icon_256x256@2x.png
 create_icon 512 icon_512x512.png
 create_icon 1024 icon_512x512@2x.png
 
-iconutil --convert icns --output "$app_resource_root/$icon_name" "$iconset_path"
+if ! iconutil --convert icns --output "$app_resource_root/$icon_name" "$iconset_path"; then
+  if [[ ! -f "$fallback_icon" ]]; then
+    echo "无法生成 App 图标，且缺少预生成的回退图标" >&2
+    exit 1
+  fi
+  cp "$fallback_icon" "$app_resource_root/$icon_name"
+  echo "iconutil 生成失败，已使用预生成 App 图标" >&2
+fi
 
 chmod 755 "$app_path/Contents/MacOS/CodexPoolMemu"
 

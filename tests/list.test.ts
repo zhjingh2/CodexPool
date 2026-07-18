@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -13,17 +14,21 @@ import test from "node:test";
 import { addCurrentAccount, listAccounts } from "../src/account-store/index.js";
 import { AccountStoreError } from "../src/account-store/errors.js";
 
-const AUTH_TEXT = `${JSON.stringify(
+function authText(accountId: string): string {
+  return `${JSON.stringify(
   {
     auth_mode: "chatgpt",
     tokens: {
-      account_id: "list-account",
+      account_id: accountId,
       access_token: "list-access-secret",
       refresh_token: "list-refresh-secret",
     },
   },
   null,
 )}\n`;
+}
+
+const AUTH_TEXT = authText("list-account");
 
 function createEnvironment() {
   const root = mkdtempSync(join(tmpdir(), "codex-pool-list-test-"));
@@ -97,6 +102,59 @@ test("rejects a malformed account metadata file", () => {
       () => listAccounts({ env: environment.env, userHome: environment.root }),
       (error: unknown) => error instanceof AccountStoreError && error.code === "CORRUPT_ACCOUNT_STORE",
     );
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("reconciles active-account after an external login to a saved account", () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    writeFileSync(join(environment.codexHome, "auth.json"), authText("other-account"), { mode: 0o600 });
+    addCurrentAccount({
+      alias: "personal",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    const refreshedAuth = authText("list-account")
+      .replace("list-access-secret", "fresh-access-secret")
+      .replace("list-refresh-secret", "fresh-refresh-secret");
+    writeFileSync(join(environment.codexHome, "auth.json"), refreshedAuth, { mode: 0o600 });
+
+    const accounts = listAccounts({ env: environment.env, userHome: environment.root });
+    assert.equal(accounts.find((account) => account.alias === "work")?.current, true);
+    assert.equal(accounts.find((account) => account.alias === "personal")?.current, false);
+    assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "work\n");
+    assert.equal(readFileSync(join(environment.poolHome, "accounts", "work", "auth.json"), "utf8"), refreshedAuth);
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("clears active-account when external login is not saved in the pool", () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    writeFileSync(join(environment.codexHome, "auth.json"), authText("unknown-account"), { mode: 0o600 });
+
+    const accounts = listAccounts({ env: environment.env, userHome: environment.root });
+    assert.equal(accounts[0]?.current, false);
+    assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "");
   } finally {
     environment.cleanup();
   }

@@ -48,6 +48,83 @@ private struct CLIResult {
     let stderr: String
 }
 
+private enum PoolDiagnostics {
+    private static let queue = DispatchQueue(label: "com.codexpool.memu.diagnostics")
+    private static let formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static var logURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/CodexPool/CodexPoolMemu.diagnostic.log")
+    }
+
+    private static func sanitized(_ text: String) -> String {
+        var result = text
+        let patterns = [
+            (#"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#, "<email>"),
+            (#"(?i)(access_token|refresh_token|id_token|authorization|bearer)[\"' :=]+[^\s,}]+"#, "$1=<redacted>"),
+        ]
+        for (pattern, replacement) in patterns {
+            if let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+                let range = NSRange(result.startIndex..<result.endIndex, in: result)
+                result = expression.stringByReplacingMatches(
+                    in: result,
+                    options: [],
+                    range: range,
+                    withTemplate: replacement
+                )
+            }
+        }
+        return String(result.prefix(2_000))
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+    }
+
+    static func operationName(for arguments: [String]) -> String {
+        if arguments.starts(with: ["account", "list"]) {
+            return arguments.contains("--refresh") ? "account-list-refresh" : "account-list"
+        }
+        if arguments.starts(with: ["account", "add"]) { return "account-add" }
+        if arguments.starts(with: ["account", "rename"]) { return "account-rename" }
+        if arguments.starts(with: ["account", "purge"]) { return "account-purge" }
+        if arguments.first == "switch" { return "switch" }
+        return arguments.first ?? "unknown"
+    }
+
+    static func record(operation: String, exitCode: Int32, error: String) {
+        queue.async {
+            let fileManager = FileManager.default
+            let directory = logURL.deletingLastPathComponent()
+            do {
+                try fileManager.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700]
+                )
+                if !fileManager.fileExists(atPath: logURL.path) {
+                    fileManager.createFile(
+                        atPath: logURL.path,
+                        contents: nil,
+                        attributes: [.posixPermissions: 0o600]
+                    )
+                }
+                let message = error.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = message.isEmpty ? "" : " error=\(sanitized(message))"
+                let line = "\(formatter.string(from: Date())) operation=\(operation) exit=\(exitCode)\(suffix)\n"
+                let handle = try FileHandle(forWritingTo: logURL)
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data(line.utf8))
+                try handle.close()
+            } catch {
+                // Diagnostics must never break account operations.
+            }
+        }
+    }
+}
+
 private enum PoolCLI {
     private static let proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"]
 
@@ -103,17 +180,29 @@ private enum PoolCLI {
                     process.waitUntilExit()
                     let output = stdout.fileHandleForReading.readDataToEndOfFile()
                     let error = stderr.fileHandleForReading.readDataToEndOfFile()
-                    continuation.resume(returning: CLIResult(
+                    let result = CLIResult(
                         exitCode: process.terminationStatus,
                         stdout: String(data: output, encoding: .utf8) ?? "",
-                        stderr: String(data: error, encoding: .utf8) ?? "",
-                    ))
+                        stderr: String(data: error, encoding: .utf8) ?? ""
+                    )
+                    PoolDiagnostics.record(
+                        operation: PoolDiagnostics.operationName(for: arguments),
+                        exitCode: result.exitCode,
+                        error: result.stderr
+                    )
+                    continuation.resume(returning: result)
                 } catch {
-                    continuation.resume(returning: CLIResult(
+                    let result = CLIResult(
                         exitCode: 127,
                         stdout: "",
-                        stderr: "无法启动 codex-pool：\(error.localizedDescription)",
-                    ))
+                        stderr: "无法启动 codex-pool：\(error.localizedDescription)"
+                    )
+                    PoolDiagnostics.record(
+                        operation: PoolDiagnostics.operationName(for: arguments),
+                        exitCode: result.exitCode,
+                        error: result.stderr
+                    )
+                    continuation.resume(returning: result)
                 }
             }
         }

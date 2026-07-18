@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   readFileSync,
+  readdirSync,
   rmSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   acquirePoolLock,
   assertRegularPrivateSourceFile,
@@ -43,6 +45,15 @@ function maskEmail(email: string | null): string | null {
 function createRuntime(poolHome: string, alias: string): string {
   const runtimeRoot = join(poolHome, "runtime", alias);
   ensurePrivateDirectory(runtimeRoot);
+  const resolvedRuntimeRoot = resolve(runtimeRoot);
+  for (const entry of readdirSync(runtimeRoot, { withFileTypes: true })) {
+    if (!/^run-[0-9a-f-]{36}$/u.test(entry.name)) continue;
+    const staleRuntime = resolve(runtimeRoot, entry.name);
+    if (!staleRuntime.startsWith(`${resolvedRuntimeRoot}/`)) continue;
+    const info = lstatSync(staleRuntime);
+    if (!info.isDirectory() || info.isSymbolicLink()) continue;
+    rmSync(staleRuntime, { force: true, recursive: true });
+  }
   const runtimeDirectory = join(runtimeRoot, `run-${randomUUID()}`);
   ensurePrivateDirectory(runtimeDirectory);
   chmodSync(runtimeDirectory, 0o700);

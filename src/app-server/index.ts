@@ -170,6 +170,8 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
     let usageGraceTimer: NodeJS.Timeout | undefined;
     let accountRetryTimer: NodeJS.Timeout | undefined;
     let rateLimitsRetryTimer: NodeJS.Timeout | undefined;
+    let terminationTimer: NodeJS.Timeout | undefined;
+    let forcedCompletionTimer: NodeJS.Timeout | undefined;
     let rateLimitsRequestSent = false;
     let rateLimitsAttempts = 0;
     let usageRequestSent = false;
@@ -177,32 +179,56 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
       finish(new AccountStoreError("APP_SERVER_TIMEOUT", "app-server 查询超时"));
     }, timeoutMs);
 
-    const finish = (error?: Error): void => {
+    const finish = (error?: Error, waitForClose = true): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (usageGraceTimer) clearTimeout(usageGraceTimer);
       if (accountRetryTimer) clearTimeout(accountRetryTimer);
       if (rateLimitsRetryTimer) clearTimeout(rateLimitsRetryTimer);
-      child.kill("SIGTERM");
-      if (error) {
-        reject(error);
+      child.stdin.end();
+
+      let completed = false;
+      const complete = (): void => {
+        if (completed) return;
+        completed = true;
+        if (terminationTimer) clearTimeout(terminationTimer);
+        if (forcedCompletionTimer) clearTimeout(forcedCompletionTimer);
+        if (error) {
+          reject(error);
+          return;
+        }
+        const account = parseAccountResponse(responses.get(2));
+        const limits = parseRateLimitsResponse(responses.get(3));
+        const usage = parseUsageResponse(responses.get(4));
+        resolve({
+          email: account.email,
+          planType: account.planType ?? limits.planType,
+          primary: limits.primary,
+          secondary: limits.secondary,
+          usage: usage.usage,
+          dailyUsageBuckets: usage.dailyUsageBuckets,
+          usageStatus: usageError === null ? "available" : "unavailable",
+          usageError,
+          fetchedAt: new Date().toISOString(),
+        });
+      };
+
+      if (!waitForClose || child.exitCode !== null || child.signalCode !== null) {
+        complete();
         return;
       }
-      const account = parseAccountResponse(responses.get(2));
-      const limits = parseRateLimitsResponse(responses.get(3));
-      const usage = parseUsageResponse(responses.get(4));
-      resolve({
-        email: account.email,
-        planType: account.planType ?? limits.planType,
-        primary: limits.primary,
-        secondary: limits.secondary,
-        usage: usage.usage,
-        dailyUsageBuckets: usage.dailyUsageBuckets,
-        usageStatus: usageError === null ? "available" : "unavailable",
-        usageError,
-        fetchedAt: new Date().toISOString(),
-      });
+
+      child.once("close", complete);
+      child.kill("SIGTERM");
+      terminationTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill("SIGKILL");
+          forcedCompletionTimer = setTimeout(complete, 500);
+          forcedCompletionTimer.unref();
+        }
+      }, 1_000);
+      terminationTimer.unref();
     };
 
     const sendRequest = (id: number, method: string, params: object): void => {
@@ -238,7 +264,10 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
       }, Math.min(150, timeoutMs));
     };
 
-    child.on("error", (error) => finish(new AccountStoreError("APP_SERVER_UNAVAILABLE", error.message)));
+    child.on("error", (error) => finish(
+      new AccountStoreError("APP_SERVER_UNAVAILABLE", error.message),
+      false,
+    ));
     child.on("exit", (code) => {
       if (settled) return;
       if (responses.has(2) && responses.has(3)) {

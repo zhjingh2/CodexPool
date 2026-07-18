@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { parseAuthIdentity } from "./auth.js";
 import { AccountStoreError } from "./errors.js";
 import { assertRegularPrivateSourceFile } from "./files.js";
+import { reconcileCurrentAccount } from "./reconcile.js";
 import { resolvePoolHome, validateAccountAlias } from "./paths.js";
 import type { AccountMetadata, AccountSummary } from "./types.js";
 
@@ -113,7 +114,6 @@ export function listAccounts(options: ListAccountsOptions = {}): AccountSummary[
       "账号仓库 accounts 目录必须是普通目录，不能是符号链接",
     );
   }
-  const activeAlias = readActiveAlias(poolHome);
   const accounts: AccountSummary[] = [];
   for (const entry of readdirSync(accountsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
@@ -125,11 +125,20 @@ export function listAccounts(options: ListAccountsOptions = {}): AccountSummary[
     const credential = inspectCredential(accountDirectory, metadata);
     accounts.push({
       ...metadata,
-      current: activeAlias === alias,
+      current: false,
       enabled: true,
       credentialStatus: credential.status,
       credentialMessage: credential.message,
     });
   }
-  return accounts.sort((left, right) => left.alias.localeCompare(right.alias));
+  const activeAlias = reconcileCurrentAccount({
+    poolHome,
+    activeAlias: readActiveAlias(poolHome),
+    accounts,
+    env,
+    userHome: options.userHome ?? homedir(),
+  }).activeAlias;
+  return accounts
+    .map((account) => ({ ...account, current: activeAlias === account.alias }))
+    .sort((left, right) => left.alias.localeCompare(right.alias));
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import test from "node:test";
@@ -121,6 +121,7 @@ input.on("line", (line) => {
   }
   if (message.id === 4) send({ jsonrpc: "2.0", id: 4, result: { summary: {}, dailyUsageBuckets: [] } });
 });
+
 `, { mode: 0o700 });
     chmodSync(executable, 0o700);
 
@@ -133,6 +134,52 @@ input.on("line", (line) => {
     assert.equal(snapshot.email, "work@example.com");
     assert.equal(snapshot.primary?.remainingPercent, 83);
     assert.equal(snapshot.usageStatus, "available");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("waits for app-server to close before resolving", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-pool-app-server-test-"));
+  try {
+    const bin = join(root, "bin");
+    const marker = join(root, "closed.txt");
+    mkdirSync(bin);
+    const executable = join(bin, "codex");
+    writeFileSync(executable, `#!/usr/bin/env node
+const fs = require("node:fs");
+const readline = require("node:readline");
+const input = readline.createInterface({ input: process.stdin });
+const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+const hold = setInterval(() => {}, 1000);
+process.on("SIGTERM", () => {
+  clearInterval(hold);
+  setTimeout(() => {
+    fs.writeFileSync(process.env.APP_SERVER_CLOSE_MARKER, "closed\\n");
+    process.exit(0);
+  }, 150);
+});
+input.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.id === 1) send({ jsonrpc: "2.0", id: 1, result: {} });
+  if (message.id === 2) send({ jsonrpc: "2.0", id: 2, result: { account: { email: "work@example.com", planType: "plus" } } });
+  if (message.id === 3) send({ jsonrpc: "2.0", id: 3, result: { rateLimits: { primary: { usedPercent: 10 }, planType: "plus" } } });
+  if (message.id === 4) send({ jsonrpc: "2.0", id: 4, result: { summary: {}, dailyUsageBuckets: [] } });
+});
+`, { mode: 0o700 });
+    chmodSync(executable, 0o700);
+
+    await queryAccountServer({
+      codexHome: root,
+      env: {
+        ...process.env,
+        APP_SERVER_CLOSE_MARKER: marker,
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+      },
+      timeoutMs: 5_000,
+    });
+
+    assert.equal(existsSync(marker), true);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
