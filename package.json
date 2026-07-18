@@ -11,7 +11,9 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "doctor": "npm run build --silent && node dist/src/cli/main.js doctor",
-    "test": "npm run build --silent && node --test dist/tests/*.test.js"
+    "test": "npm run build --silent && node --test dist/tests/*.test.js",
+    "menu:build": "mkdir -p .build && swiftc -O -parse-as-library -o .build/CodexPoolMenuBar macos/CodexPoolMenuBar.swift -framework Cocoa -framework SwiftUI",
+    "menu": "npm run build --silent && npm run menu:build && .build/CodexPoolMenuBar"
   },
   "engines": {
     "node": ">=20"
