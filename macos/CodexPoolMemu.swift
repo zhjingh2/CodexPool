@@ -398,6 +398,7 @@ private struct ContentView: View {
     @ObservedObject var model: PoolModel
     @State private var accountToRename: PoolAccount?
     @State private var accountToPurge: PoolAccount?
+    @State private var showingStatusDetails = false
 
     private let background = Color(red: 0.055, green: 0.067, blue: 0.082)
     private let panel = Color(red: 0.09, green: 0.106, blue: 0.13)
@@ -434,6 +435,16 @@ private struct ContentView: View {
                 secondaryButton: .cancel(),
             )
         }
+        .sheet(isPresented: $showingStatusDetails) {
+            StatusDetailSheet(
+                text: statusDetailText,
+                isError: model.error != nil,
+            )
+        }
+    }
+
+    private var statusDetailText: String {
+        model.error ?? model.message ?? ""
     }
 
     private var header: some View {
@@ -630,19 +641,15 @@ private struct ContentView: View {
 private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let error = model.error {
-                Text(error)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.red.opacity(0.9))
-                    .lineLimit(2)
+                statusButton(text: error, color: Color.red.opacity(0.9))
             } else if let message = model.message {
-                Text(message)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(aqua)
+                statusButton(text: message, color: aqua)
             }
             HStack {
-                Text("冷切换模式 · App 运行时会拒绝切换")
+                Text("账号提示：添加和切换账号请通过 Codex Pool 完成，\n不要在 Codex App 中直接登录或退出登录。")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.3))
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button {
                     NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/ChatGPT.app"))
@@ -669,6 +676,47 @@ private var footer: some View {
         .padding(.horizontal, 18)
         .padding(.vertical, 13)
         .background(Color.black.opacity(0.18))
+    }
+
+    private func statusButton(text: String, color: Color) -> some View {
+        Button {
+            showingStatusDetails = true
+        } label: {
+            Text(text)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(color)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .help("点击查看完整提示")
+    }
+}
+
+private struct StatusDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let text: String
+    let isError: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(isError ? "错误详情" : "提示详情")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+            ScrollView {
+                Text(text)
+                    .font(.system(size: 12, design: .rounded))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                Spacer()
+                Button("关闭") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 360, height: 220)
     }
 }
 
