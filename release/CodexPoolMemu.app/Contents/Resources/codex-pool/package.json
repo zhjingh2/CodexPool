@@ -1,0 +1,28 @@
+{
+  "name": "codex-pool",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Codex account manager with safe cold switching.",
+  "type": "module",
+  "bin": {
+    "codex-pool": "dist/src/cli/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "doctor": "npm run build --silent && node dist/src/cli/main.js doctor",
+    "test": "npm run build --silent && node --test dist/tests/*.test.js",
+    "menu:build": "mkdir -p .build/module-cache && swiftc -O -parse-as-library -module-cache-path .build/module-cache -o .build/CodexPoolMemu macos/CodexPoolMemu.swift -framework Cocoa -framework SwiftUI",
+    "menu:app": "npm run build --silent && bash macos/build-app.sh",
+    "menu:install": "npm run menu:app && bash macos/install-login.sh",
+    "menu:uninstall": "bash macos/uninstall-login.sh",
+    "menu": "npm run build --silent && npm run menu:build && .build/CodexPoolMemu"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

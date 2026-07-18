@@ -99,6 +99,8 @@ open .build/CodexPoolMemu.app
 
 该命令会先构建 TypeScript CLI，再生成标准 macOS App Bundle，并把运行所需的 `dist/src`、`package.json` 和菜单栏图标复制到 App 的 `Contents/Resources/codex-pool/`。App 会自动从 Bundle 中解析 CLI，不依赖启动时的工作目录。Node.js 和 Codex CLI 仍需安装在本机；App 会补充 Homebrew、`~/.npm-global/bin` 和 `~/.local/bin` 等常见 PATH。
 
+仓库同时提供预编译 App：`release/CodexPoolMemu.app`。克隆仓库或下载 ZIP 后，可以将该 App 拖到“应用程序”文件夹再打开。当前版本未进行 Apple Developer 签名和公证，首次打开时可能需要在“系统设置 > 隐私与安全性”中允许运行；Node.js 和 Codex CLI 仍需安装在本机。源码更新后请重新运行 `npm run menu:app`，再更新 `release/CodexPoolMemu.app`。
+
 ### 登录后自动启动
 
 ```bash
