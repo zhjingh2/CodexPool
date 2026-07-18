@@ -41,3 +41,56 @@ input.on("line", (line) => {
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("loads the account before requesting rate limits and retries a temporarily null account", async () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-pool-app-server-test-"));
+  try {
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const executable = join(bin, "codex");
+    writeFileSync(executable, `#!/usr/bin/env node
+const readline = require("node:readline");
+const input = readline.createInterface({ input: process.stdin });
+const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+let accountReads = 0;
+let accountLoaded = false;
+let rateLimitsLoaded = false;
+input.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.id === 1) send({ jsonrpc: "2.0", id: 1, result: {} });
+  if (message.method === "account/read") {
+    accountReads += 1;
+    if (accountReads === 1) {
+      send({ jsonrpc: "2.0", id: message.id, result: { account: null, requiresOpenaiAuth: true } });
+    } else {
+      accountLoaded = true;
+      send({ jsonrpc: "2.0", id: message.id, result: { account: { email: "work@example.com", planType: "plus" } } });
+    }
+  }
+  if (message.id === 3) {
+    if (!accountLoaded) process.exit(3);
+    rateLimitsLoaded = true;
+    send({ jsonrpc: "2.0", id: 3, result: { rateLimits: { primary: { usedPercent: 25 }, planType: "plus" } } });
+  }
+  if (message.id === 4) {
+    if (!accountLoaded || !rateLimitsLoaded) process.exit(4);
+    send({ jsonrpc: "2.0", id: 4, result: { summary: {}, dailyUsageBuckets: [] } });
+  }
+});
+`, { mode: 0o700 });
+    chmodSync(executable, 0o700);
+
+    const snapshot = await queryAccountServer({
+      codexHome: root,
+      env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}` },
+      timeoutMs: 5_000,
+    });
+
+    assert.equal(snapshot.email, "work@example.com");
+    assert.equal(snapshot.planType, "plus");
+    assert.equal(snapshot.primary?.remainingPercent, 75);
+    assert.equal(snapshot.usageStatus, "available");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});

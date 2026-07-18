@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { AccountStoreError, addCurrentAccount } from "../src/account-store/index.js";
-import { parseAuthIdentity } from "../src/account-store/auth.js";
+import { extractAuthEmail, parseAuthIdentity } from "../src/account-store/auth.js";
 import { validateAccountAlias } from "../src/account-store/paths.js";
 
 const AUTH_DOCUMENT = {
@@ -84,6 +84,17 @@ test("derives a stable fingerprint without returning the raw account id", () => 
   assert.equal(first.authMode, "chatgpt");
 });
 
+test("extracts a verified email from the local ID token without exposing credentials", () => {
+  const payload = Buffer.from(JSON.stringify({ email: "work@example.com", email_verified: true }))
+    .toString("base64url");
+  const authText = JSON.stringify({
+    ...AUTH_DOCUMENT,
+    tokens: { ...AUTH_DOCUMENT.tokens, id_token: `header.${payload}.signature` },
+  });
+  assert.equal(extractAuthEmail(authText), "work@example.com");
+  assert.equal(extractAuthEmail(JSON.stringify(AUTH_DOCUMENT)), null);
+});
+
 test("imports the current account with private permissions and safe metadata", () => {
   const environment = createTestEnvironment();
   try {
@@ -146,23 +157,20 @@ test("requires explicit file credential storage", () => {
   }
 });
 
-test("refuses to import while Codex App is running", () => {
+test("allows importing the current account while Codex App is running", () => {
   const environment = createTestEnvironment();
   try {
-    assert.throws(
-      () =>
-        addCurrentAccount({
-          alias: "work",
-          env: {
-            CODEX_HOME: environment.codexHome,
-            CODEX_POOL_HOME: environment.poolHome,
-          },
-          userHome: environment.root,
-          processList: () => "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
-          loginStatus: () => true,
-        }),
-      (error: unknown) => error instanceof AccountStoreError && error.code === "CODEX_RUNNING",
-    );
+    const result = addCurrentAccount({
+      alias: "work",
+      env: {
+        CODEX_HOME: environment.codexHome,
+        CODEX_POOL_HOME: environment.poolHome,
+      },
+      userHome: environment.root,
+      processList: () => "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+      loginStatus: () => true,
+    });
+    assert.equal(result.alias, "work");
   } finally {
     environment.cleanup();
   }

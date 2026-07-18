@@ -9,7 +9,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { resolveCodexHome } from "../preflight/doctor.js";
 import { detectCredentialStoreMode } from "../preflight/config.js";
-import { summarizeCodexProcesses } from "../preflight/processes.js";
 import { parseAuthIdentity } from "./auth.js";
 import { AccountStoreError } from "./errors.js";
 import {
@@ -36,13 +35,6 @@ export interface ImportAccountOptions {
   poolHome: string;
   now?: () => Date;
   setActiveAccount?: boolean;
-}
-
-function defaultProcessList(): string {
-  const result = spawnSync("ps", ["-axo", "pid=,ppid=,command="], {
-    encoding: "utf8",
-  });
-  return result.status === 0 ? result.stdout : "";
 }
 
 function defaultLoginStatus(codexHome: string, env: NodeJS.ProcessEnv): boolean {
@@ -117,14 +109,6 @@ export function addCurrentAccount(options: AddCurrentAccountOptions): AddAccount
   const codexHome = resolveCodexHome(env, userHome);
   const poolHome = resolvePoolHome(env, userHome);
   const configPath = join(codexHome, "config.toml");
-
-  const running = summarizeCodexProcesses((options.processList ?? defaultProcessList)());
-  if (running.desktopAppCount + running.appServerCount > 0) {
-    throw new AccountStoreError(
-      "CODEX_RUNNING",
-      "Codex App 或 app-server 仍在运行；请完全退出后再导入当前账号",
-    );
-  }
 
   if (!existsSync(configPath)) {
     throw new AccountStoreError("CONFIG_NOT_FOUND", "当前 CODEX_HOME 中不存在 config.toml");

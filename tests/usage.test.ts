@@ -103,3 +103,49 @@ test("refreshes an account in an isolated runtime and persists safe quota metada
     environment.cleanup();
   }
 });
+
+test("falls back to the stored ID token when app-server omits the email", async () => {
+  const environment = createEnvironment();
+  try {
+    const payload = Buffer.from(
+      JSON.stringify({ email: "token@example.com", email_verified: true }),
+    ).toString("base64url");
+    const authWithEmail = JSON.parse(AUTH_TEXT) as { tokens: Record<string, string> };
+    authWithEmail.tokens.id_token = `header.${payload}.signature`;
+    writeFileSync(
+      join(environment.codexHome, "auth.json"),
+      `${JSON.stringify(authWithEmail, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+
+    const snapshot = await refreshAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      query: async () => ({
+        email: null,
+        planType: "plus",
+        primary: null,
+        secondary: null,
+        usage: null,
+        dailyUsageBuckets: null,
+        usageStatus: "unavailable",
+        usageError: "temporarily unavailable",
+        fetchedAt: "2026-07-18T12:00:00.000Z",
+      }),
+    });
+
+    assert.equal(snapshot.email, "token@example.com");
+    const account = listAccounts({ env: environment.env, userHome: environment.root })[0];
+    assert.equal(account?.email, "token@example.com");
+  } finally {
+    environment.cleanup();
+  }
+});

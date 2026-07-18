@@ -83,6 +83,14 @@ function parseAccountResponse(value: unknown): { email: string | null; planType:
   };
 }
 
+function hasAccountResponse(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const response = value as { account?: unknown };
+  return Boolean(response.account && typeof response.account === "object");
+}
+
 function parseRateLimitsResponse(value: unknown): {
   primary: RateLimitWindow | null;
   secondary: RateLimitWindow | null;
@@ -160,6 +168,9 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
     let settled = false;
     let usageError: string | null = null;
     let usageGraceTimer: NodeJS.Timeout | undefined;
+    let accountRetryTimer: NodeJS.Timeout | undefined;
+    let rateLimitsRequestSent = false;
+    let usageRequestSent = false;
     const timer = setTimeout(() => {
       finish(new AccountStoreError("APP_SERVER_TIMEOUT", "app-server 查询超时"));
     }, timeoutMs);
@@ -169,6 +180,7 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
       settled = true;
       clearTimeout(timer);
       if (usageGraceTimer) clearTimeout(usageGraceTimer);
+      if (accountRetryTimer) clearTimeout(accountRetryTimer);
       child.kill("SIGTERM");
       if (error) {
         reject(error);
@@ -188,6 +200,38 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
         usageError,
         fetchedAt: new Date().toISOString(),
       });
+    };
+
+    const sendRequest = (id: number, method: string, params: object): void => {
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+    };
+
+    const sendRateLimitsRequest = (): void => {
+      if (rateLimitsRequestSent || settled) return;
+      rateLimitsRequestSent = true;
+      sendRequest(3, "account/rateLimits/read", {});
+    };
+
+    const sendUsageRequest = (): void => {
+      if (usageRequestSent || settled) return;
+      usageRequestSent = true;
+      sendRequest(4, "account/usage/read", {});
+    };
+
+    const handleAccountResponse = (message: JsonRpcMessage): void => {
+      if (message.error) {
+        finish(rpcError(message, "account/read"));
+        return;
+      }
+      responses.set(2, message.result);
+      if (hasAccountResponse(message.result) || message.id === 5) {
+        sendRateLimitsRequest();
+        return;
+      }
+      accountRetryTimer = setTimeout(() => {
+        accountRetryTimer = undefined;
+        sendRequest(5, "account/read", { refreshToken: true });
+      }, Math.min(150, timeoutMs));
     };
 
     child.on("error", (error) => finish(new AccountStoreError("APP_SERVER_UNAVAILABLE", error.message)));
@@ -217,7 +261,9 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
           return;
         }
         if (message.id === undefined) continue;
-        if (message.error) {
+        if (message.id === 2 || message.id === 5) {
+          handleAccountResponse(message);
+        } else if (message.error) {
           if (message.id === 4) {
             usageError = redactSensitiveText(
               message.error.message ?? "未知 app-server 错误",
@@ -230,15 +276,12 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
         } else {
           responses.set(message.id, message.result);
         }
+        if (message.id === 3 && !message.error) {
+          sendUsageRequest();
+        }
         if (message.id === 1) {
           child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "initialized", params: {} })}\n`);
-          for (const [id, method, params] of [
-            [2, "account/read", { refreshToken: true }],
-            [3, "account/rateLimits/read", {}],
-            [4, "account/usage/read", {}],
-          ] as const) {
-            child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
-          }
+          sendRequest(2, "account/read", { refreshToken: true });
         }
         if (responses.has(2) && responses.has(3) && responses.has(4)) {
           finish();

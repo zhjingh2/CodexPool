@@ -3,6 +3,7 @@ export interface AccountMetadata {
   alias: string;
   accountFingerprint: string;
   authMode: string;
+  email?: string | null;
   emailMasked: string | null;
   planType: string | null;
   addedAt: string;

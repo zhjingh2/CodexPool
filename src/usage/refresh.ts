@@ -14,7 +14,7 @@ import {
   writePrivateFileAtomically,
 } from "../account-store/files.js";
 import { readAccountMetadata } from "../account-store/list.js";
-import { parseAuthIdentity } from "../account-store/auth.js";
+import { extractAuthEmail, parseAuthIdentity } from "../account-store/auth.js";
 import { AccountStoreError } from "../account-store/errors.js";
 import { getAccountDirectory, resolvePoolHome, validateAccountAlias } from "../account-store/paths.js";
 import type { AccountMetadata } from "../account-store/types.js";
@@ -61,6 +61,7 @@ function updateMetadata(
 ): void {
   const updated: AccountMetadata = {
     ...metadata,
+    email: snapshot.email,
     emailMasked: maskEmail(snapshot.email),
     planType: snapshot.planType,
     updatedAt: now().toISOString(),
@@ -103,6 +104,7 @@ export async function refreshAccount(options: RefreshAccountOptions): Promise<Ac
       codexHome: runtimeDirectory,
       env,
     });
+    let emailSourceAuth = storedAuth;
 
     const refreshedAuthPath = join(runtimeDirectory, "auth.json");
     if (existsSync(refreshedAuthPath)) {
@@ -118,9 +120,13 @@ export async function refreshAccount(options: RefreshAccountOptions): Promise<Ac
       if (!refreshedAuth.equals(storedAuth)) {
         writePrivateFileAtomically(authPath, refreshedAuth);
       }
+      emailSourceAuth = refreshedAuth;
     }
-    updateMetadata(accountDirectory, metadata, snapshot, options.now ?? (() => new Date()));
-    return snapshot;
+    const resolvedSnapshot = snapshot.email
+      ? snapshot
+      : { ...snapshot, email: extractAuthEmail(emailSourceAuth.toString("utf8")) };
+    updateMetadata(accountDirectory, metadata, resolvedSnapshot, options.now ?? (() => new Date()));
+    return resolvedSnapshot;
   } finally {
     try {
       if (runtimeDirectory) {
