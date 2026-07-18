@@ -4,3 +4,12 @@ coverage/
 .build/
 *.log
 .DS_Store
+
+# The prebuilt release bundle contains its own runtime CLI under Resources.
+!release/
+!release/CodexPoolMemu.app/
+!release/CodexPoolMemu.app/Contents/
+!release/CodexPoolMemu.app/Contents/Resources/
+!release/CodexPoolMemu.app/Contents/Resources/codex-pool/
+!release/CodexPoolMemu.app/Contents/Resources/codex-pool/dist/
+!release/CodexPoolMemu.app/Contents/Resources/codex-pool/dist/**
