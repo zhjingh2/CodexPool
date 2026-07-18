@@ -35,10 +35,14 @@ cp -R "$project_root/macos/assets/." "$resource_root/macos/assets/"
 
 iconset_path="$icon_work_directory/CodexPoolMemu.iconset"
 icon_master="$icon_work_directory/icon-1024.png"
+icon_scaled="$icon_work_directory/icon-scaled.png"
 mkdir -p "$iconset_path"
 
-# macOS 应用图标需要正方形多尺寸资源；始终从菜单栏图标生成，保证两者同步。
-sips --padToHeightWidth 1024 1024 "$menu_icon" --out "$icon_master" >/dev/null
+# macOS 应用图标需要正方形多尺寸资源。菜单栏图标是白色模板图，直接用于
+# Finder/Launchpad 时会在浅色背景上隐形，因此给 App 图标加深色底；菜单栏
+# 仍继续使用原始透明模板图。
+sips --resampleWidth 850 "$menu_icon" --out "$icon_scaled" >/dev/null
+sips --padToHeightWidth 1024 1024 --padColor 182238 "$icon_scaled" --out "$icon_master" >/dev/null
 
 create_icon() {
   local pixels="$1"
