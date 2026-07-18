@@ -206,10 +206,65 @@ private final class PoolModel: ObservableObject {
         }
         addCurrentAccount(alias: email)
     }
+
+    func renameAccount(_ account: PoolAccount, to alias: String) {
+        guard !isLoading else { return }
+        let normalizedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAlias.isEmpty else { return }
+        isLoading = true
+        isRefreshing = false
+        error = nil
+        message = "正在重命名 \(account.alias)…"
+        Task {
+            let result = await PoolCLI.run(arguments: ["account", "rename", account.alias, normalizedAlias])
+            await MainActor.run {
+                self.isLoading = false
+                if result.exitCode == 0 {
+                    self.message = "已将 \(account.alias) 重命名为 \(normalizedAlias)"
+                    self.load()
+                } else {
+                    self.message = nil
+                    let detail = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.error = detail.isEmpty ? "账号重命名失败" : detail
+                }
+            }
+        }
+    }
+
+    func purgeAccount(_ account: PoolAccount) {
+        guard !isLoading else { return }
+        guard !account.current else {
+            error = "当前激活账号不能永久删除，请先切换账号"
+            message = nil
+            return
+        }
+        isLoading = true
+        isRefreshing = false
+        error = nil
+        message = "正在删除 (account.alias)…"
+        Task {
+            let result = await PoolCLI.run(arguments: [
+                "account", "purge", account.alias, "--confirm", account.alias,
+            ])
+            await MainActor.run {
+                self.isLoading = false
+                if result.exitCode == 0 {
+                    self.message = "已永久删除账号 \(account.alias)"
+                    self.load()
+                } else {
+                    self.message = nil
+                    let detail = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.error = detail.isEmpty ? "账号永久删除失败" : detail
+                }
+            }
+        }
+    }
 }
 
 private struct ContentView: View {
     @ObservedObject var model: PoolModel
+    @State private var accountToRename: PoolAccount?
+    @State private var accountToPurge: PoolAccount?
 
     private let background = Color(red: 0.055, green: 0.067, blue: 0.082)
     private let panel = Color(red: 0.09, green: 0.106, blue: 0.13)
@@ -231,6 +286,21 @@ private struct ContentView: View {
         .frame(width: 370, height: 515)
         .background(background)
         .preferredColorScheme(.dark)
+        .sheet(item: $accountToRename) { account in
+            RenameAccountSheet(currentAlias: account.alias) { newAlias in
+                model.renameAccount(account, to: newAlias)
+            }
+        }
+        .alert(item: $accountToPurge) { account in
+            Alert(
+                title: Text("永久删除账号？"),
+                message: Text("将删除 (account.alias) 的本地凭证、元数据和用量缓存。此操作不可恢复。"),
+                primaryButton: .destructive(Text("永久删除")) {
+                    model.purgeAccount(account)
+                },
+                secondaryButton: .cancel(),
+            )
+        }
     }
 
     private var header: some View {
@@ -343,6 +413,7 @@ private struct ContentView: View {
                     .buttonStyle(.plain)
                     .disabled(model.isLoading)
                 }
+                accountActions(for: account)
             }
             quotaBar(account)
         }
@@ -361,6 +432,32 @@ private struct ContentView: View {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .stroke(account.current ? amber.opacity(0.42) : Color.white.opacity(0.06), lineWidth: 1)
         }
+    }
+
+    private func accountActions(for account: PoolAccount) -> some View {
+        Menu {
+            Button("重命名") {
+                accountToRename = account
+            }
+            Divider()
+            if account.current {
+                Button("永久删除", role: .destructive) {}
+                    .disabled(true)
+            } else {
+                Button("永久删除", role: .destructive) {
+                    accountToPurge = account
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.62))
+                .frame(width: 26, height: 26)
+                .background(Color.white.opacity(0.06), in: Circle())
+        }
+        .menuStyle(.borderlessButton)
+        .disabled(model.isLoading)
+        .help(account.current ? "重命名账号；当前账号不可永久删除" : "账号操作")
     }
 
     private func quotaBar(_ account: PoolAccount) -> some View {
@@ -395,7 +492,7 @@ private struct ContentView: View {
         }
     }
 
-    private var footer: some View {
+private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let error = model.error {
                 Text(error)
@@ -421,11 +518,65 @@ private struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .help("打开 Codex App")
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.58))
+                }
+                .buttonStyle(.plain)
+                .help("退出 Codex Pool")
             }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 13)
         .background(Color.black.opacity(0.18))
+    }
+}
+
+private struct RenameAccountSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var alias: String
+    let currentAlias: String
+    let onSubmit: (String) -> Void
+
+    init(currentAlias: String, onSubmit: @escaping (String) -> Void) {
+        self.currentAlias = currentAlias
+        self.onSubmit = onSubmit
+        _alias = State(initialValue: currentAlias)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("重命名账号")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+            Text("只修改账号别名，不会改变登录凭证或额度缓存。")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(.secondary)
+            TextField("新账号别名", text: $alias)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(submit)
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                Button("保存") { submit() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
+    }
+
+    private func submit() {
+        let normalizedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAlias.isEmpty, normalizedAlias != currentAlias else {
+            dismiss()
+            return
+        }
+        onSubmit(normalizedAlias)
+        dismiss()
     }
 }
 
