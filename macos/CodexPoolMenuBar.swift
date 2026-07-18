@@ -294,7 +294,7 @@ private struct ContentView: View {
         .alert(item: $accountToPurge) { account in
             Alert(
                 title: Text("永久删除账号？"),
-                message: Text("将删除 (account.alias) 的本地凭证、元数据和用量缓存。此操作不可恢复。"),
+                message: Text("将删除该账号的本地凭证、元数据和用量缓存。此操作不可恢复。"),
                 primaryButton: .destructive(Text("永久删除")) {
                     model.purgeAccount(account)
                 },
@@ -456,6 +456,7 @@ private struct ContentView: View {
                 .background(Color.white.opacity(0.06), in: Circle())
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .disabled(model.isLoading)
         .help(account.current ? "重命名账号；当前账号不可永久删除" : "账号操作")
     }
@@ -512,9 +513,10 @@ private var footer: some View {
                 Button {
                     NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/ChatGPT.app"))
                 } label: {
-                    Image(systemName: "arrow.up.forward.app")
+                    Image(systemName: "macwindow")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.58))
+                        .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
                 .help("打开 Codex App")
@@ -524,6 +526,7 @@ private var footer: some View {
                     Image(systemName: "power")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.58))
+                        .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
                 .help("退出 Codex Pool")
