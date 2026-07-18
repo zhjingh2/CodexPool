@@ -404,8 +404,10 @@ personal   Plus    耗尽    剩余 0%     今天 18:45     剩余 27%    -
 - 导入按钮不弹窗，直接使用当前账号完整邮箱作为别名，允许 Codex App 运行，复用 `account add` 的重复账号校验并在面板提示结果；邮箱未刷新时提示用户先刷新；
 - 刷新成功后显示本地时间 `MM-dd HH:mm:ss`，刷新期间显示转圈动画并禁止重复点击；
 - 每次打开菜单栏面板时自动触发一次刷新，先显示缓存并复用同一刷新状态；
-- 当前覆盖列表、刷新、导入、重命名、purge、`switch --launch`、打开 App 和退出 Codex Pool；`doctor`、`account login` 以及不启动 App 的纯 `switch` 仍保留在 CLI；
+- 当前覆盖列表、刷新、导入、重命名、purge、`switch --launch`、打开 App 和退出 CodexPoolMemu；`doctor`、`account login` 以及不启动 App 的纯 `switch` 仍保留在 CLI；
 - 卡片右上角 `⋯` 菜单承载重命名和永久删除；purge 使用确认框即可，不要求用户再次输入别名，当前激活账号置灰不可删除；
+- 提供标准 `.app` 打包脚本，将 CLI 和资源嵌入 App Bundle，并支持从 Bundle 解析运行目录；
+- 提供 LaunchAgent 安装与卸载脚本，将 App 安装到 `~/Applications/`，实现登录后自动启动并保留独立日志；安装时同步当前终端已设置的代理环境，避免 launchd 缺少网络出口导致额度请求失败；App 手动启动时复用 LaunchAgent 中已保存的代理配置；
 - 不尝试修改已运行 App 的账号状态。
 
 ### 7.2 推荐模块
@@ -497,6 +499,8 @@ MVP 完成需要满足：
 
 - 可以导入至少两个文件凭证模式的 ChatGPT/Codex 账号；
 - Codex App 运行时也可以导入当前账号；
+- 可以生成可直接打开的 `CodexPoolMemu.app`；
+- 安装后 LaunchAgent 状态为 running，并在下次登录时自动启动；
 - `account list --refresh` 能展示账号状态和限额信息；
 - `switch` 在 App 未退出时拒绝执行；
 - 切换后 `codex login status` 和 `account/read` 均确认目标账号；

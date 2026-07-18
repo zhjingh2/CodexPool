@@ -12,8 +12,11 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "doctor": "npm run build --silent && node dist/src/cli/main.js doctor",
     "test": "npm run build --silent && node --test dist/tests/*.test.js",
-    "menu:build": "mkdir -p .build && swiftc -O -parse-as-library -o .build/CodexPoolMenuBar macos/CodexPoolMenuBar.swift -framework Cocoa -framework SwiftUI",
-    "menu": "npm run build --silent && npm run menu:build && .build/CodexPoolMenuBar"
+    "menu:build": "mkdir -p .build && swiftc -O -parse-as-library -o .build/CodexPoolMemu macos/CodexPoolMemu.swift -framework Cocoa -framework SwiftUI",
+    "menu:app": "npm run build --silent && bash macos/build-app.sh",
+    "menu:install": "npm run menu:app && bash macos/install-login.sh",
+    "menu:uninstall": "bash macos/uninstall-login.sh",
+    "menu": "npm run build --silent && npm run menu:build && .build/CodexPoolMemu"
   },
   "engines": {
     "node": ">=20"

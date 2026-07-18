@@ -169,7 +169,9 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
     let usageError: string | null = null;
     let usageGraceTimer: NodeJS.Timeout | undefined;
     let accountRetryTimer: NodeJS.Timeout | undefined;
+    let rateLimitsRetryTimer: NodeJS.Timeout | undefined;
     let rateLimitsRequestSent = false;
+    let rateLimitsAttempts = 0;
     let usageRequestSent = false;
     const timer = setTimeout(() => {
       finish(new AccountStoreError("APP_SERVER_TIMEOUT", "app-server 查询超时"));
@@ -181,6 +183,7 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
       clearTimeout(timer);
       if (usageGraceTimer) clearTimeout(usageGraceTimer);
       if (accountRetryTimer) clearTimeout(accountRetryTimer);
+      if (rateLimitsRetryTimer) clearTimeout(rateLimitsRetryTimer);
       child.kill("SIGTERM");
       if (error) {
         reject(error);
@@ -209,6 +212,7 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
     const sendRateLimitsRequest = (): void => {
       if (rateLimitsRequestSent || settled) return;
       rateLimitsRequestSent = true;
+      rateLimitsAttempts += 1;
       sendRequest(3, "account/rateLimits/read", {});
     };
 
@@ -269,6 +273,13 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
               message.error.message ?? "未知 app-server 错误",
             );
             responses.set(4, null);
+          } else if (message.id === 3 && rateLimitsAttempts < 3) {
+            // 限时网络/后端失败时重试，避免一次短暂错误导致整个面板刷新失败。
+            rateLimitsRequestSent = false;
+            rateLimitsRetryTimer = setTimeout(() => {
+              rateLimitsRetryTimer = undefined;
+              sendRateLimitsRequest();
+            }, Math.min(250 * rateLimitsAttempts, timeoutMs));
           } else {
             finish(rpcError(message, message.id === 2 ? "account/read" : message.id === 3 ? "account/rateLimits/read" : "initialize"));
             return;

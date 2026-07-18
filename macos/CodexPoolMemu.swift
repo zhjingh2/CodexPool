@@ -49,6 +49,26 @@ private struct CLIResult {
 }
 
 private enum PoolCLI {
+    private static let proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"]
+
+    private static func loadSavedNetworkEnvironment(into environment: inout [String: String]) {
+        let launchAgentURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents/com.codexpool.menubar.plist")
+        guard let data = try? Data(contentsOf: launchAgentURL),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let root = plist as? [String: Any],
+              let savedEnvironment = root["EnvironmentVariables"] as? [String: Any]
+        else {
+            return
+        }
+
+        for key in proxyKeys where environment[key]?.isEmpty != false {
+            if let value = savedEnvironment[key] as? String, !value.isEmpty {
+                environment[key] = value
+            }
+        }
+    }
+
     static func run(arguments: [String]) async -> CLIResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -58,6 +78,23 @@ private enum PoolCLI {
                 process.standardOutput = stdout
                 process.standardError = stderr
                 process.currentDirectoryURL = projectRoot
+                var environment = ProcessInfo.processInfo.environment
+                loadSavedNetworkEnvironment(into: &environment)
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                let commonPaths = [
+                    "/opt/homebrew/bin",
+                    "/usr/local/bin",
+                    "\(home)/.npm-global/bin",
+                    "\(home)/.local/bin",
+                ]
+                let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+                let pathEntries = existingPath.split(separator: ":").map(String.init)
+                var mergedPaths: [String] = []
+                for path in commonPaths + pathEntries where !mergedPaths.contains(path) {
+                    mergedPaths.append(path)
+                }
+                environment["PATH"] = mergedPaths.joined(separator: ":")
+                process.environment = environment
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
                 process.arguments = ["node", cliPath.path] + arguments
 
@@ -90,6 +127,10 @@ private enum PoolCLI {
         let derivedRoot = executable.deletingLastPathComponent().deletingLastPathComponent()
         if FileManager.default.fileExists(atPath: derivedRoot.appendingPathComponent("package.json").path) {
             return derivedRoot
+        }
+        if let bundledRoot = Bundle.main.resourceURL?.appendingPathComponent("codex-pool"),
+           FileManager.default.fileExists(atPath: bundledRoot.appendingPathComponent("package.json").path) {
+            return bundledRoot
         }
         return URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
     }
@@ -529,7 +570,7 @@ private var footer: some View {
                         .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
-                .help("退出 Codex Pool")
+                .help("退出 CodexPoolMemu")
             }
         }
         .padding(.horizontal, 18)
@@ -599,7 +640,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 customIcon.isTemplate = true
                 button.image = customIcon
             } else {
-                button.image = NSImage(systemSymbolName: "person.2.wave.2.fill", accessibilityDescription: "Codex Pool")
+                button.image = NSImage(systemSymbolName: "person.2.wave.2.fill", accessibilityDescription: "CodexPoolMemu")
                 button.image?.isTemplate = true
             }
             button.action = #selector(togglePopover)
@@ -624,7 +665,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-private struct CodexPoolMenuBarApp: App {
+private struct CodexPoolMemuApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {

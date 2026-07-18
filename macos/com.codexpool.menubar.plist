@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.codexpool.menubar</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__APP_EXECUTABLE__</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>EnvironmentVariables</key>
+	<dict/>
+	<key>KeepAlive</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>StandardOutPath</key>
+	<string>__LOG_DIRECTORY__/CodexPoolMemu.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOG_DIRECTORY__/CodexPoolMemu.error.log</string>
+</dict>
+</plist>

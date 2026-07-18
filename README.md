@@ -86,4 +86,27 @@ node dist/src/cli/main.js account purge personal
 npm run menu
 ```
 
-菜单栏面板会复用 `codex-pool account list --json`、`account add <alias>`、`account rename`、`account purge` 和 `switch <alias> --launch`，展示当前账号、完整邮箱、套餐、额度和重置时间，并提供导入当前账号、刷新、切换、重命名、永久删除、打开 Codex App 和退出 Codex Pool 入口。每次打开面板时会自动刷新一次账号额度；面板先显示本地缓存，刷新期间显示转圈状态。导入按钮不弹窗，直接使用当前账号的完整邮箱作为账号别名；如果邮箱尚未刷新，会提示先刷新，如果别名或当前账号已存在，会在面板中提示无需重复导入。导入当前账号不要求退出 Codex App。卡片右上角的 `⋯` 菜单提供重命名和永久删除；永久删除只需确认框，不要求输入别名，当前激活账号不可删除。底部的退出按钮只结束 Codex Pool，不会退出 Codex App。默认从当前项目的 `dist/src/cli/main.js` 读取 CLI；如果作为独立应用启动，可设置 `CODEX_POOL_ROOT` 或 `CODEX_POOL_CLI` 指向项目和 CLI 路径。菜单栏图标位于 `macos/assets/codex-pool-account.png`，缺少资源时自动回退到 SF Symbol。完整邮箱在成功刷新账号信息后写入本地元数据，刷新未成功时显示“邮箱未刷新”，不会回退显示掩码邮箱。
+菜单栏面板会复用 `codex-pool account list --json`、`account add <alias>`、`account rename`、`account purge` 和 `switch <alias> --launch`，展示当前账号、完整邮箱、套餐、额度和重置时间，并提供导入当前账号、刷新、切换、重命名、永久删除、打开 Codex App 和退出 CodexPoolMemu 入口。每次打开面板时会自动刷新一次账号额度；面板先显示本地缓存，刷新期间显示转圈状态。导入按钮不弹窗，直接使用当前账号的完整邮箱作为账号别名；如果邮箱尚未刷新，会提示先刷新，如果别名或当前账号已存在，会在面板中提示无需重复导入。导入当前账号不要求退出 Codex App。卡片右上角的 `⋯` 菜单提供重命名和永久删除；永久删除只需确认框，不要求输入别名，当前激活账号不可删除。底部的退出按钮只结束 CodexPoolMemu，不会退出 Codex App。默认从当前项目的 `dist/src/cli/main.js` 读取 CLI；如果作为独立应用启动，可设置 `CODEX_POOL_ROOT` 或 `CODEX_POOL_CLI` 指向项目和 CLI 路径。菜单栏图标位于 `macos/assets/codex-pool-account.png`，缺少资源时自动回退到 SF Symbol。完整邮箱在成功刷新账号信息后写入本地元数据，刷新未成功时显示“邮箱未刷新”，不会回退显示掩码邮箱。
+
+### 打包 macOS App
+
+```bash
+npm run menu:app
+open .build/CodexPoolMemu.app
+```
+
+该命令会先构建 TypeScript CLI，再生成标准 macOS App Bundle，并把运行所需的 `dist/src`、`package.json` 和菜单栏图标复制到 App 的 `Contents/Resources/codex-pool/`。App 会自动从 Bundle 中解析 CLI，不依赖启动时的工作目录。Node.js 和 Codex CLI 仍需安装在本机；App 会补充 Homebrew、`~/.npm-global/bin` 和 `~/.local/bin` 等常见 PATH。
+
+### 登录后自动启动
+
+```bash
+npm run menu:install
+```
+
+该命令会重新打包 App，将其安装到 `~/Applications/CodexPoolMemu.app`，并安装、立即加载 `~/Library/LaunchAgents/com.codexpool.menubar.plist`。之后每次登录 macOS 都会自动启动 CodexPoolMemu。如果终端通过 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` 上网，安装时会将已设置的代理保存到 LaunchAgent，使 App 与终端使用相同的网络出口；代理变更后请重新运行该命令。从 Finder 手动打开 App 时，App 也会读取已保存在 LaunchAgent 中的代理配置。日志位于 `~/Library/Logs/CodexPool/`。
+
+移除已安装 App 和登录启动：
+
+```bash
+npm run menu:uninstall
+```
