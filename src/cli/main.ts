@@ -4,6 +4,7 @@ import {
   AccountStoreError,
   addCurrentAccount,
   listAccounts,
+  renameAccount,
 } from "../account-store/index.js";
 import { switchAccount } from "../auth-swap/index.js";
 import { runDoctor } from "../preflight/doctor.js";
@@ -18,6 +19,7 @@ Usage:
   codex-pool account add <alias> [--json]
   codex-pool account login <alias>
   codex-pool account list [--refresh] [--json]
+  codex-pool account rename <from> <to>
   codex-pool switch <alias>
   codex-pool --help
   codex-pool --version
@@ -114,11 +116,31 @@ async function main(args: string[]): Promise<number> {
         return 1;
       }
     }
+    if (action === "rename") {
+      const to = accountOptions[0];
+      if (!alias || !to || accountOptions.length > 1) {
+        process.stderr.write("Usage: codex-pool account rename <from> <to>\n");
+        return 2;
+      }
+      try {
+        const result = renameAccount({ from: alias, to });
+        process.stdout.write(`已将账号 ${result.from} 重命名为 ${result.to}。\n`);
+        return 0;
+      } catch (error) {
+        if (error instanceof AccountStoreError) {
+          process.stderr.write(`账号重命名失败：${error.message}\n`);
+          return 1;
+        }
+        process.stderr.write("账号重命名失败：发生未预期错误。\n");
+        return 1;
+      }
+    }
     if ((action !== "add" && action !== "login") || !alias) {
       process.stderr.write(
         "Usage: codex-pool account add <alias> [--json]\n" +
           "       codex-pool account login <alias>\n" +
-          "       codex-pool account list [--refresh] [--json]\n",
+          "       codex-pool account list [--refresh] [--json]\n" +
+          "       codex-pool account rename <from> <to>\n",
       );
       return 2;
     }

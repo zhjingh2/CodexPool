@@ -53,6 +53,14 @@ node dist/src/cli/main.js switch company
 
 该命令会校验目标账号、备份当前全局 `auth.json`，原子替换凭证，运行 `codex login status` 验证目标账号，再更新 `active-account`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态。
 
+## 重命名账号
+
+```bash
+node dist/src/cli/main.js account rename work company
+```
+
+该命令只修改账号别名和对应目录名，不修改凭证、账号指纹或额度缓存；如果原账号不存在或新别名已存在，会拒绝操作。
+
 ## 查看账号列表
 
 ```bash
