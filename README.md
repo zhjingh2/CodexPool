@@ -52,3 +52,12 @@ node dist/src/cli/main.js switch company
 ```
 
 该命令会校验目标账号、备份当前全局 `auth.json`，原子替换凭证，运行 `codex login status` 验证目标账号，再更新 `active-account`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态。
+
+## 查看账号列表
+
+```bash
+node dist/src/cli/main.js account list
+node dist/src/cli/main.js account list --json
+```
+
+当前列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；额度和重置时间会在后续 app-server 采集阶段接入，暂显示为“未查询”。

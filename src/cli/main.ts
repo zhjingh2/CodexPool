@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
-import { AccountStoreError, addCurrentAccount } from "../account-store/index.js";
+import {
+  AccountStoreError,
+  addCurrentAccount,
+  listAccounts,
+} from "../account-store/index.js";
 import { switchAccount } from "../auth-swap/index.js";
 import { runDoctor } from "../preflight/doctor.js";
 import { renderDoctorReport } from "../preflight/render.js";
@@ -12,6 +16,7 @@ Usage:
   codex-pool doctor [--json]
   codex-pool account add <alias> [--json]
   codex-pool account login <alias>
+  codex-pool account list [--json]
   codex-pool switch <alias>
   codex-pool --help
   codex-pool --version
@@ -48,10 +53,46 @@ function main(args: string[]): number {
 
   if (command === "account") {
     const [action, alias, ...accountOptions] = options;
+    if (action === "list") {
+      const unknownOption = (alias ? [alias, ...accountOptions] : accountOptions).find(
+        (option) => option !== "--json",
+      );
+      if (unknownOption) {
+        process.stderr.write(`Unknown option: ${unknownOption}\n`);
+        return 2;
+      }
+      try {
+        const accounts = listAccounts();
+        if (accountOptions.includes("--json") || alias === "--json") {
+          process.stdout.write(`${JSON.stringify(accounts, null, 2)}\n`);
+        } else if (accounts.length === 0) {
+          process.stdout.write("账号池为空，请先使用 account add 或 account login。\n");
+        } else {
+          process.stdout.write("别名\t套餐\t状态\t凭证\t当前\t额度\n");
+          for (const account of accounts) {
+            const plan = account.planType ?? "未查询";
+            const status = account.credentialStatus === "ok" ? "可用" : "异常";
+            const credential = account.credentialStatus === "ok" ? "正常" : account.credentialMessage ?? "需检查";
+            process.stdout.write(
+              `${account.alias}\t${plan}\t${status}\t${credential}\t${account.current ? "✓" : "-"}\t未查询\n`,
+            );
+          }
+        }
+        return 0;
+      } catch (error) {
+        if (error instanceof AccountStoreError) {
+          process.stderr.write(`账号列表读取失败：${error.message}\n`);
+          return 1;
+        }
+        process.stderr.write("账号列表读取失败：发生未预期错误。\n");
+        return 1;
+      }
+    }
     if ((action !== "add" && action !== "login") || !alias) {
       process.stderr.write(
         "Usage: codex-pool account add <alias> [--json]\n" +
-          "       codex-pool account login <alias>\n",
+          "       codex-pool account login <alias>\n" +
+          "       codex-pool account list [--json]\n",
       );
       return 2;
     }

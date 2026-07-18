@@ -16,8 +16,16 @@ export interface AddAccountResult {
   accountDirectory: string;
 }
 
+export type CredentialStatus = "ok" | "missing" | "invalid";
+
+export interface AccountSummary extends AccountMetadata {
+  current: boolean;
+  enabled: boolean;
+  credentialStatus: CredentialStatus;
+  credentialMessage: string | null;
+}
+
 export interface ParsedAuthIdentity {
   fingerprint: string;
   authMode: string;
 }
-
