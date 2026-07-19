@@ -41,23 +41,31 @@ Codex Pool 是一个本地运行的 Codex 多账号管理工具。它不提供�
 
 ## 3. 总体架构
 
-```mermaid
-flowchart TD
-    User[用户] --> CLI[TypeScript CLI]
-    User --> Menu[SwiftUI 菜单栏 App]
-    Menu -->|JSON CLI 调用| CLI
-    CLI --> Store[账号仓库 account-store]
-    CLI --> Switch[认证切换 auth-swap]
-    CLI --> Refresh[额度刷新 usage]
-    CLI --> Doctor[环境预检 preflight]
-    Switch --> Global[全局 CODEX_HOME/auth.json]
-    Store --> Pool[~/.codex-pool]
-    Refresh --> Runtime[临时 CODEX_HOME]
-    Runtime --> Server[Codex app-server JSON-RPC]
-    Doctor --> Server
-    CLI --> Codex[Codex CLI]
-    Menu --> Launch[macOS open -a]
-    Launch --> ChatGPT[Codex/ChatGPT App]
+```text
+┌────────┐                  ┌──────────────────────┐
+│  用户  │ ────────────────> │ SwiftUI 菜单栏 App   │
+└───┬────┘                  └──────────┬───────────┘
+    │                                  │ JSON CLI 调用
+    │                                  ▼
+    │                       ┌──────────────────────┐
+    └─────────────────────> │ TypeScript CLI       │
+                            └───┬────┬────┬────┬───┘
+                                │    │    │    │
+              ┌─────────────────┘    │    │    └────────────────┐
+              ▼                      ▼    ▼                     ▼
+   ┌──────────────────┐   ┌────────────┐ ┌──────────────┐  ┌──────────────┐
+   │ account-store    │   │ auth-swap  │ │ usage        │  │ preflight    │
+   │ 账号仓库          │   │ 认证切换   │ │ 额度刷新      │  │ 环境预检      │
+   └────────┬─────────┘   └─────┬──────┘ └──────┬───────┘  └──────┬───────┘
+            │                    │               │                 │
+            ▼                    ▼               ▼                 ▼
+     ~/.codex-pool      全局 CODEX_HOME/    临时 CODEX_HOME   Codex CLI 与
+                         auth.json             │              app-server
+                                               ▼
+                                      Codex app-server
+                                       JSON-RPC 查询
+
+SwiftUI 菜单栏 App ── macOS open -a ──> Codex/ChatGPT App
 ```
 
 ### 3.1 主要数据流
