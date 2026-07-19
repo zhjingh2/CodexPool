@@ -19,14 +19,8 @@ trap cleanup EXIT
 
 rm -rf "$app_path"
 mkdir -p "$app_path/Contents/MacOS" "$resource_root/dist/src" "$resource_root/macos/assets"
-mkdir -p "$project_root/.build/module-cache"
-
-swiftc -O -parse-as-library \
-  -module-cache-path "$project_root/.build/module-cache" \
-  -o "$app_path/Contents/MacOS/CodexPoolMemu" \
-  "$project_root/macos/CodexPoolMemu.swift" \
-  -framework Cocoa \
-  -framework SwiftUI
+bash "$script_directory/build-binary.sh"
+cp "$project_root/.build/CodexPoolMemu" "$app_path/Contents/MacOS/CodexPoolMemu"
 
 cp "$project_root/macos/Info.plist" "$app_path/Contents/Info.plist"
 cp "$project_root/package.json" "$resource_root/package.json"

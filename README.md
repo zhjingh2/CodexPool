@@ -19,11 +19,11 @@ CodexPoolMemu 是一个常驻 macOS 菜单栏的账号控制台，支持：
 
 前往 [GitHub Releases](https://github.com/zhjingh2/CodexPool/releases) 下载最新版本：
 
-[下载 CodexPoolMemu v0.1.0（Intel Mac）](https://github.com/zhjingh2/CodexPool/releases/download/v0.1.0/CodexPoolMemu-0.1.0-macos-x86_64.zip)
+[下载 CodexPoolMemu v0.1.1（Intel + Apple Silicon）](https://github.com/zhjingh2/CodexPool/releases/download/v0.1.1/CodexPoolMemu-0.1.1-macos-universal.zip)
 
 解压后将 `CodexPoolMemu.app` 拖入“应用程序”文件夹即可。
 
-当前发布包为 Intel `x86_64` 架构，Apple Silicon Mac 需要 Rosetta。运行还需要 macOS、Node.js 20+ 和 Codex CLI。当前版本尚未进行 Apple Developer ID 签名和公证，首次打开时可能需要在“系统设置 > 隐私与安全性”中允许运行。
+当前发布包为 Universal 架构，同时支持 Intel `x86_64` 和 Apple Silicon `arm64` Mac。运行还需要 macOS、Node.js 20+ 和 Codex CLI。当前版本尚未进行 Apple Developer ID 签名和公证，首次打开时可能需要在“系统设置 > 隐私与安全性”中允许运行。
 
 ## 从源码运行
 

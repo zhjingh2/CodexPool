@@ -1,6 +1,6 @@
 # Codex Pool 项目技术文档
 
-> 版本：`0.1.0`  
+> 版本：`0.1.1`
 > 当前状态：CLI、额度查询和 macOS 菜单栏 App 已可用  
 > 支持平台：macOS  
 > 文档依据：当前源码、测试和构建脚本
@@ -35,7 +35,7 @@ Codex Pool 是一个本地运行的 Codex 多账号管理工具。它不提供�
 - 不支持 Codex App 运行期间的热切换；
 - 不实现账号自动轮换、并发使用或平台限制绕过；
 - 不删除共享的 Codex 会话、项目、插件或 SQLite 状态；
-- 当前预编译 Release 为 Intel `x86_64`，需要用户安装 Node.js 20+ 和 Codex CLI；
+- 当前预编译 Release 为 Universal，同时支持 Intel `x86_64` 和 Apple Silicon `arm64`，仍需要用户安装 Node.js 20+ 和 Codex CLI；
 - 当前 App 未进行 Apple Developer ID 签名和公证；
 - app-server 接口属于实验性协议，未来 Codex 版本升级可能需要适配。
 
@@ -192,7 +192,7 @@ codex-pool --help
 codex-pool --version
 ```
 
-`--help` 输出命令用法，`--version` 输出当前版本 `0.1.0`。
+`--help` 输出命令用法，`--version` 输出当前版本 `0.1.1`。
 
 ### 6.2 `doctor [--json]`
 
@@ -415,18 +415,33 @@ flowchart LR
 
 ### 9.2 `npm run menu:build`
 
-该脚本：
+该脚本调用 `macos/build-binary.sh`，默认使用 macOS 13.0 作为最低部署版本，并分别编译两个目标：
 
-```bash
-swiftc -O -parse-as-library \
-  -module-cache-path .build/module-cache \
-  -o .build/CodexPoolMemu \
-  macos/CodexPoolMemu.swift \
-  -framework Cocoa \
-  -framework SwiftUI
+```text
+x86_64-apple-macos13.0
+arm64-apple-macos13.0
 ```
 
-它只生成 Swift 可执行文件，不包含 TypeScript CLI 和资源。
+每个架构使用独立的 Swift module cache，避免交叉编译时复用错误架构或旧路径的缓存。两个可执行文件生成后，再使用：
+
+```bash
+lipo -create \
+  .build/CodexPoolMemu-x86_64 \
+  .build/CodexPoolMemu-arm64 \
+  -output .build/CodexPoolMemu
+```
+
+最终 `.build/CodexPoolMemu` 是 Universal Mach-O 文件。可以用下面的命令确认架构：
+
+```bash
+lipo -info .build/CodexPoolMemu
+```
+
+如需调整最低 macOS 版本，可以在构建时设置：
+
+```bash
+MACOS_DEPLOYMENT_TARGET=14.0 npm run menu:build
+```
 
 ### 9.3 `npm run menu:app`
 
@@ -455,7 +470,7 @@ swiftc -O -parse-as-library \
 │           └── macos/assets/
 ```
 
-当前 Bundle 只内置项目自身的 Swift 和 JavaScript 代码，不内置 Node.js 或 Codex CLI；用户环境仍需提供这两个运行时依赖。
+当前 Bundle 内置 Universal Swift 可执行文件以及项目自身的 JavaScript 代码，不内置 Node.js 或 Codex CLI；用户环境仍需提供这两个运行时依赖。
 
 ### 9.4 安装为登录启动 App
 
@@ -480,8 +495,8 @@ npm run menu:app
 mkdir -p dist/releases
 ditto -c -k --sequesterRsrc --keepParent \
   .build/CodexPoolMemu.app \
-  dist/releases/CodexPoolMemu-0.1.0-macos-x86_64.zip
-shasum -a 256 dist/releases/CodexPoolMemu-0.1.0-macos-x86_64.zip \
+  dist/releases/CodexPoolMemu-0.1.1-macos-universal.zip
+shasum -a 256 dist/releases/CodexPoolMemu-0.1.1-macos-universal.zip \
   > dist/releases/SHA256SUMS.txt
 ```
 
@@ -593,7 +608,6 @@ Finder 和 LaunchAgent 的 PATH 通常比终端短。确认 Node.js 和 Codex CL
 
 ## 13. 后续演进方向
 
-- 构建 Universal 或 Apple Silicon 原生版本；
 - 接入 Apple Developer ID 签名和公证；
 - 将发布流程迁移到 GitHub Actions；
 - 在兼容的情况下支持系统钥匙串，而不是只支持文件凭证；
