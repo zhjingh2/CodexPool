@@ -23,6 +23,8 @@ export interface SwitchJournal {
   backupPath: string;
   transactionDirectory: string;
   previousAlias: string | null;
+  /** Old journals omit this field and are treated as having a backup. */
+  previousAuthExisted?: boolean;
   targetAlias: string;
   targetFingerprint: string;
   phase: SwitchPhase;
@@ -81,6 +83,7 @@ export function readSwitchJournal(poolHome: string): SwitchJournal {
     typeof journal.backupPath !== "string" ||
     typeof journal.transactionDirectory !== "string" ||
     (journal.previousAlias !== null && typeof journal.previousAlias !== "string") ||
+    (journal.previousAuthExisted !== undefined && typeof journal.previousAuthExisted !== "boolean") ||
     typeof journal.targetAlias !== "string" ||
     typeof journal.targetFingerprint !== "string" ||
     !phases.includes(journal.phase as SwitchPhase) ||

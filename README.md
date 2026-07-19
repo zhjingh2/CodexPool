@@ -50,7 +50,7 @@ node dist/src/cli/main.js switch company
 node dist/src/cli/main.js switch company --launch
 ```
 
-该命令会校验目标账号、备份当前全局 `auth.json`，原子替换凭证，运行 `codex login status` 验证目标账号，再更新 `active-account`。指定 `--launch` 时，仅在切换事务完成后通过 macOS `open -a ChatGPT` 启动 Codex App；如果启动失败，账号切换不会回滚，需要手动打开 App。若 App 名称不同，可通过 `CODEX_APP_NAME` 覆盖默认的 `ChatGPT`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态。
+该命令会校验目标账号；如果当前全局 `CODEX_HOME/auth.json` 存在，会先备份并原子替换凭证；如果 Codex App 当前未登录，则会把“无当前账号”作为合法起点。随后运行 `codex login status` 验证目标账号，再更新 `active-account`。指定 `--launch` 时，仅在切换事务完成后通过 macOS `open -a ChatGPT` 启动 Codex App；如果启动失败，账号切换不会回滚，需要手动打开 App。若 App 名称不同，可通过 `CODEX_APP_NAME` 覆盖默认的 `ChatGPT`。切换过程中如果进程中断，下次切换会先根据 `switch-journal.json` 恢复到一致状态；无当前凭证时会清理中断前写入的新凭证。
 
 ## 重命名账号
 

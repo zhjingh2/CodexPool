@@ -9,6 +9,8 @@ export interface SwitchJournal {
     backupPath: string;
     transactionDirectory: string;
     previousAlias: string | null;
+    /** Old journals omit this field and are treated as having a backup. */
+    previousAuthExisted?: boolean;
     targetAlias: string;
     targetFingerprint: string;
     phase: SwitchPhase;

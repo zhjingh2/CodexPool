@@ -76,9 +76,20 @@ function assertJournalBelongsToPool(journal, poolHome) {
     }
 }
 function restorePreviousState(journal) {
-    assertRegularPrivateSourceFile(journal.backupPath);
-    const previousAuth = readFileSync(journal.backupPath);
-    writePrivateFileAtomically(journal.authPath, previousAuth);
+    if (journal.previousAuthExisted === false) {
+        if (existsSync(journal.authPath)) {
+            const info = lstatSync(journal.authPath);
+            if (!info.isFile() || info.isSymbolicLink()) {
+                throw new AccountStoreError("UNSAFE_AUTH_FILE", "切换回滚时发现全局 auth.json 不是普通文件，已停止回滚");
+            }
+            unlinkSync(journal.authPath);
+        }
+    }
+    else {
+        assertRegularPrivateSourceFile(journal.backupPath);
+        const previousAuth = readFileSync(journal.backupPath);
+        writePrivateFileAtomically(journal.authPath, previousAuth);
+    }
     if (journal.previousAlias === null) {
         if (existsSync(journal.activeAccountPath)) {
             const info = lstatSync(journal.activeAccountPath);
@@ -166,16 +177,21 @@ export function switchAccount(options) {
         if (targetIdentity.fingerprint !== targetMetadataFingerprint) {
             throw new AccountStoreError("ACCOUNT_METADATA_MISMATCH", `账号 ${alias} 的 auth.json 与 metadata.json 指纹不一致，请先修复账号仓库`);
         }
-        assertRegularPrivateSourceFile(authPath);
-        const currentIdentity = parseAuthIdentity(readFileSync(authPath, "utf8"));
+        const previousAuthExisted = existsSync(authPath);
+        const currentIdentity = previousAuthExisted
+            ? parseAuthIdentity(readFileSync(authPath, "utf8"))
+            : null;
         const previousAlias = readActiveAlias(activeAccountPath);
-        if (previousAlias) {
+        if (previousAlias && currentIdentity) {
             const storedFingerprint = readStoredFingerprint(poolHome, previousAlias);
             if (storedFingerprint !== currentIdentity.fingerprint) {
                 throw new AccountStoreError("ACTIVE_ACCOUNT_MISMATCH", `active-account 指向 ${previousAlias}，但全局 auth.json 属于其他账号，请先修复状态`);
             }
         }
-        if (previousAlias === alias && currentIdentity.fingerprint === targetIdentity.fingerprint) {
+        else if (previousAlias && !currentIdentity) {
+            throw new AccountStoreError("ACTIVE_ACCOUNT_MISMATCH", `active-account 指向 ${previousAlias}，但全局 auth.json 不存在，请先修复状态`);
+        }
+        if (previousAlias === alias && currentIdentity?.fingerprint === targetIdentity.fingerprint) {
             return {
                 alias,
                 accountFingerprint: targetIdentity.fingerprint,
@@ -188,7 +204,9 @@ export function switchAccount(options) {
         const backupPath = join(transactionDirectory, "previous-auth.json");
         let journal;
         ensurePrivateDirectory(transactionDirectory);
-        writePrivateFileAtomically(backupPath, readFileSync(authPath));
+        if (previousAuthExisted) {
+            writePrivateFileAtomically(backupPath, readFileSync(authPath));
+        }
         journal = {
             schemaVersion: 1,
             transactionId,
@@ -199,6 +217,7 @@ export function switchAccount(options) {
             backupPath,
             transactionDirectory,
             previousAlias,
+            previousAuthExisted,
             targetAlias: alias,
             targetFingerprint: targetIdentity.fingerprint,
             phase: "prepared",

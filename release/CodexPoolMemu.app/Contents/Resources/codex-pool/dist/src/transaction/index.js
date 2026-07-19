@@ -41,6 +41,7 @@ export function readSwitchJournal(poolHome) {
         typeof journal.backupPath !== "string" ||
         typeof journal.transactionDirectory !== "string" ||
         (journal.previousAlias !== null && typeof journal.previousAlias !== "string") ||
+        (journal.previousAuthExisted !== undefined && typeof journal.previousAuthExisted !== "boolean") ||
         typeof journal.targetAlias !== "string" ||
         typeof journal.targetFingerprint !== "string" ||
         !phases.includes(journal.phase) ||

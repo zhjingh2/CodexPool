@@ -804,6 +804,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = PoolModel()
     private let popover = NSPopover()
     private var statusItem: NSStatusItem!
+    private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -825,7 +826,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 370, height: 515)
         popover.contentViewController = NSHostingController(rootView: ContentView(model: model))
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.closePopover()
+            }
+        }
         model.load()
+    }
+
+    private func closePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        }
     }
 
     @objc private func togglePopover() {
@@ -836,6 +850,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             model.load(refresh: true)
+        }
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        // Clicking the desktop or another app transfers focus away from this
+        // menu-bar app. Close explicitly in addition to the transient behavior
+        // so the panel never remains floating after an outside click.
+        closePopover()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let outsideClickMonitor {
+            NSEvent.removeMonitor(outsideClickMonitor)
+            self.outsideClickMonitor = nil
         }
     }
 }

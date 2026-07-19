@@ -168,6 +168,57 @@ test("restores the previous auth and active account when target verification fai
   }
 });
 
+test("switches to a saved account when the global CODEX_HOME is logged out", () => {
+  const environment = createEnvironment();
+  try {
+    addAccounts(environment);
+    rmSync(join(environment.codexHome, "auth.json"));
+
+    const result = switchAccount({
+      alias: "personal",
+      env: { CODEX_HOME: environment.codexHome, CODEX_POOL_HOME: environment.poolHome },
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: (codexHome) => {
+        assert.equal(readFileSync(join(codexHome, "auth.json"), "utf8"), authText("account-b"));
+        return true;
+      },
+    });
+
+    assert.equal(result.previousAlias, null);
+    assert.equal(readFileSync(join(environment.codexHome, "auth.json"), "utf8"), authText("account-b"));
+    assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "personal\n");
+    assert.equal(existsSync(join(environment.poolHome, "switch-journal.json")), false);
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("removes the new auth and leaves CODEX_HOME logged out when verification fails", () => {
+  const environment = createEnvironment();
+  try {
+    addAccounts(environment);
+    rmSync(join(environment.codexHome, "auth.json"));
+
+    assert.throws(
+      () =>
+        switchAccount({
+          alias: "personal",
+          env: { CODEX_HOME: environment.codexHome, CODEX_POOL_HOME: environment.poolHome },
+          userHome: environment.root,
+          processList: () => "",
+          loginStatus: () => false,
+        }),
+      (error: unknown) => error instanceof AccountStoreError && error.code === "TARGET_LOGIN_INVALID",
+    );
+    assert.equal(existsSync(join(environment.codexHome, "auth.json")), false);
+    assert.equal(existsSync(join(environment.poolHome, "active-account")), false);
+    assert.equal(existsSync(join(environment.poolHome, "switch-journal.json")), false);
+  } finally {
+    environment.cleanup();
+  }
+});
+
 test("refuses to switch while Codex processes are running", () => {
   const environment = createEnvironment();
   try {
