@@ -2,6 +2,8 @@
 
 Codex Pool 是一个面向 macOS 的本地 Codex 多账号管理工具，支持账号导入、官方登录、额度查看和安全切换。
 
+想了解实现原理、工程结构、CLI 细节和 macOS 构建过程，请阅读[项目技术文档](docs/PROJECT_DOCUMENTATION.md)。
+
 ## macOS App
 
 CodexPoolMemu 是一个常驻 macOS 菜单栏的账号控制台，支持：
