@@ -34,8 +34,17 @@ export function reconcileCurrentAccount(options) {
     const codexHome = resolveCodexHome(env, options.userHome ?? homedir());
     const globalAuth = readGlobalAuth(codexHome);
     if (!globalAuth) {
+        if (options.activeAlias !== null) {
+            const releaseLock = acquirePoolLock(options.poolHome);
+            try {
+                writePrivateFileAtomically(join(options.poolHome, "active-account"), "");
+            }
+            finally {
+                releaseLock();
+            }
+        }
         return {
-            activeAlias: options.activeAlias,
+            activeAlias: null,
             status: "unavailable",
             credentialsSynced: false,
         };
@@ -91,6 +100,16 @@ export function reconcileCurrentAccount(options) {
     try {
         if (credentialsSynced) {
             writePrivateFileAtomically(targetAuthPath, globalAuth.content);
+        }
+        if (matched.needsRelogin && credentialsSynced) {
+            const metadataPath = join(getAccountDirectory(options.poolHome, matched.alias), "metadata.json");
+            const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+            writePrivateFileAtomically(metadataPath, `${JSON.stringify({
+                ...metadata,
+                needsRelogin: false,
+                reloginReason: null,
+                updatedAt: new Date().toISOString(),
+            }, null, 2)}\n`);
         }
         if (nextAlias !== options.activeAlias) {
             writePrivateFileAtomically(join(options.poolHome, "active-account"), `${nextAlias}\n`);

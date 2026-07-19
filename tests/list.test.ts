@@ -117,6 +117,11 @@ test("reconciles active-account after an external login to a saved account", () 
       processList: () => "",
       loginStatus: () => true,
     });
+    const workMetadataPath = join(environment.poolHome, "accounts", "work", "metadata.json");
+    const workMetadata = JSON.parse(readFileSync(workMetadataPath, "utf8")) as Record<string, unknown>;
+    workMetadata.needsRelogin = true;
+    workMetadata.reloginReason = "登录凭证已失效，请重新登录";
+    writeFileSync(workMetadataPath, `${JSON.stringify(workMetadata, null, 2)}\n`, { mode: 0o600 });
     writeFileSync(join(environment.codexHome, "auth.json"), authText("other-account"), { mode: 0o600 });
     addCurrentAccount({
       alias: "personal",
@@ -133,8 +138,11 @@ test("reconciles active-account after an external login to a saved account", () 
     const accounts = listAccounts({ env: environment.env, userHome: environment.root });
     assert.equal(accounts.find((account) => account.alias === "work")?.current, true);
     assert.equal(accounts.find((account) => account.alias === "personal")?.current, false);
+    assert.equal(accounts.find((account) => account.alias === "work")?.credentialStatus, "ok");
     assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "work\n");
     assert.equal(readFileSync(join(environment.poolHome, "accounts", "work", "auth.json"), "utf8"), refreshedAuth);
+    const updatedWorkMetadata = JSON.parse(readFileSync(workMetadataPath, "utf8")) as Record<string, unknown>;
+    assert.equal(updatedWorkMetadata.needsRelogin, false);
   } finally {
     environment.cleanup();
   }
@@ -155,6 +163,27 @@ test("clears active-account when external login is not saved in the pool", () =>
     const accounts = listAccounts({ env: environment.env, userHome: environment.root });
     assert.equal(accounts[0]?.current, false);
     assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "");
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("clears active-account when the external app removes the global credentials", () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    unlinkSync(join(environment.codexHome, "auth.json"));
+
+    const accounts = listAccounts({ env: environment.env, userHome: environment.root });
+    assert.equal(accounts[0]?.current, false);
+    assert.equal(readFileSync(join(environment.poolHome, "active-account"), "utf8"), "");
+    assert.equal(existsSync(join(environment.poolHome, "accounts", "work", "metadata.json")), true);
   } finally {
     environment.cleanup();
   }

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { resolveCodexHome } from "../preflight/doctor.js";
 import { detectCredentialStoreMode } from "../preflight/config.js";
 import { parseAuthIdentity } from "./auth.js";
+import { readAccountMetadata } from "./list.js";
 import { AccountStoreError } from "./errors.js";
 import { acquirePoolLock, assertRegularPrivateSourceFile, ensurePrivateDirectory, writePrivateFileAtomically, } from "./files.js";
 import { getAccountDirectory, resolvePoolHome, validateAccountAlias } from "./paths.js";
@@ -93,27 +94,44 @@ export function importAccountFromHome(options) {
     const releaseLock = acquirePoolLock(options.poolHome);
     let accountDirectoryCreated = false;
     try {
-        if (existsSync(accountDirectory)) {
+        const existingMetadata = existsSync(accountDirectory)
+            ? readAccountMetadata(accountDirectory, alias)
+            : undefined;
+        if (existingMetadata && !options.replaceNeedsRelogin) {
             throw new AccountStoreError("ALIAS_EXISTS", `账号别名 ${alias} 已存在`);
         }
+        if (existingMetadata && !existingMetadata.needsRelogin) {
+            throw new AccountStoreError("ALIAS_EXISTS", `账号别名 ${alias} 已存在`);
+        }
+        if (existingMetadata && existingMetadata.accountFingerprint !== identity.fingerprint) {
+            throw new AccountStoreError("ACCOUNT_ALIAS_MISMATCH", `重新登录的账号与 ${alias} 不是同一个账号，已拒绝覆盖`);
+        }
         const existingAccounts = readExistingMetadata(accountsRoot);
-        const duplicate = existingAccounts.find((account) => account.accountFingerprint === identity.fingerprint);
+        const duplicate = existingAccounts.find((account) => account.accountFingerprint === identity.fingerprint && account.alias !== alias);
         if (duplicate) {
             throw new AccountStoreError("ACCOUNT_EXISTS", `当前账号已经保存为 ${duplicate.alias}，不会重复导入`);
         }
         ensurePrivateDirectory(accountDirectory);
-        accountDirectoryCreated = true;
+        accountDirectoryCreated = !existingMetadata;
         const timestamp = now().toISOString();
-        const metadata = {
-            schemaVersion: 1,
-            alias,
-            accountFingerprint: identity.fingerprint,
-            authMode: identity.authMode,
-            emailMasked: null,
-            planType: null,
-            addedAt: timestamp,
-            updatedAt: timestamp,
-        };
+        const metadata = existingMetadata
+            ? {
+                ...existingMetadata,
+                authMode: identity.authMode,
+                needsRelogin: false,
+                reloginReason: null,
+                updatedAt: timestamp,
+            }
+            : {
+                schemaVersion: 1,
+                alias,
+                accountFingerprint: identity.fingerprint,
+                authMode: identity.authMode,
+                emailMasked: null,
+                planType: null,
+                addedAt: timestamp,
+                updatedAt: timestamp,
+            };
         writePrivateFileAtomically(join(accountDirectory, "auth.json"), authBuffer);
         writePrivateFileAtomically(join(accountDirectory, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`);
         if (options.setActiveAccount !== false) {

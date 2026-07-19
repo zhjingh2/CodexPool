@@ -2,7 +2,7 @@ import type { AccountMetadata } from "./types.js";
 export interface ReconcileCurrentAccountOptions {
     poolHome: string;
     activeAlias: string | null;
-    accounts: readonly Pick<AccountMetadata, "alias" | "accountFingerprint">[];
+    accounts: readonly Pick<AccountMetadata, "alias" | "accountFingerprint" | "needsRelogin">[];
     env?: NodeJS.ProcessEnv;
     userHome?: string;
 }

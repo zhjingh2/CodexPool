@@ -86,3 +86,39 @@ test("a cancelled official login leaves the current account and pool unchanged",
     environment.cleanup();
   }
 });
+
+test("re-login clears the needs-relogin marker for the same account", () => {
+  const environment = createEnvironment();
+  try {
+    loginAccount({
+      alias: "personal",
+      env: { CODEX_POOL_HOME: environment.poolHome },
+      userHome: environment.root,
+      runLogin: (loginEnv) => {
+        writeFileSync(join(loginEnv.CODEX_HOME!, "auth.json"), LOGIN_AUTH, { mode: 0o600 });
+        return 0;
+      },
+    });
+    const metadataPath = join(environment.poolHome, "accounts", "personal", "metadata.json");
+    const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
+    metadata.needsRelogin = true;
+    metadata.reloginReason = "登录凭证已失效，请重新登录";
+    writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, { mode: 0o600 });
+
+    loginAccount({
+      alias: "personal",
+      env: { CODEX_POOL_HOME: environment.poolHome },
+      userHome: environment.root,
+      runLogin: (loginEnv) => {
+        writeFileSync(join(loginEnv.CODEX_HOME!, "auth.json"), LOGIN_AUTH, { mode: 0o600 });
+        return 0;
+      },
+    });
+
+    const updatedMetadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
+    assert.equal(updatedMetadata.needsRelogin, false);
+    assert.equal(updatedMetadata.reloginReason, null);
+  } finally {
+    environment.cleanup();
+  }
+});

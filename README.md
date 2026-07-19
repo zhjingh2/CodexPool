@@ -31,7 +31,7 @@ node dist/src/cli/main.js doctor --json
 node dist/src/cli/main.js account add work
 ```
 
-该命令不要求退出 Codex App，只读取当前 `auth.json` 并将其原子复制到 `~/.codex-pool/accounts/work/`。它要求 `cli_auth_credentials_store = "file"`；账号指纹只保存 SHA-256 哈希，命令不会输出或记录 token。账号切换仍属于冷切换操作，必须先退出 Codex App 和 app-server。
+该命令不要求退出 Codex App，只读取当前 `auth.json` 并将其原子复制到默认的 `~/.codex-pool/accounts/work/`。设置 `CODEX_POOL_HOME` 后，可以将账号池放到其他目录。它要求 `cli_auth_credentials_store = "file"`；账号指纹只保存 SHA-256 哈希，命令不会输出或记录 token。账号切换仍属于冷切换操作，必须先退出 Codex App 和 app-server。
 
 ## 添加新账号
 
@@ -39,7 +39,7 @@ node dist/src/cli/main.js account add work
 node dist/src/cli/main.js account login personal
 ```
 
-该命令会在 `~/.codex-pool/runtime/login/` 下创建临时 `CODEX_HOME`，调用官方 `codex login`。登录取消或失败时不会清理当前全局账号；成功后才会导入新账号，并删除临时目录。
+该命令会在账号池的 `runtime/login/` 下创建临时 `CODEX_HOME`，调用官方 `codex login`。只有登录成功后才会导入新账号，且不会替换当前全局账号；登录取消或失败时当前账号保持不变。无论成功、取消还是失败，流程结束时都会清理临时目录。
 
 ## 冷切换账号
 
@@ -88,7 +88,7 @@ npm run menu
 
 菜单栏面板会复用 `codex-pool account list --json`、`account login <alias>`、`account rename`、`account purge` 和 `switch <alias> --launch`，展示当前账号、完整邮箱、套餐、额度和重置时间，并提供添加新账号登录、刷新、切换、重命名、永久删除、打开 Codex App 和退出 CodexPoolMemu 入口。每次打开面板时会自动刷新一次账号额度；面板先显示本地缓存，刷新期间显示转圈状态。添加按钮会启动隔离的官方 Codex 登录流程，并自动生成易读的随机别名；登录成功后保存新账号，不替换当前全局账号。卡片右上角的 `⋯` 菜单提供重命名和永久删除；永久删除只需确认框，不要求输入别名，当前激活账号不可删除。底部的退出按钮只结束 CodexPoolMemu，不会退出 Codex App。默认从当前项目的 `dist/src/cli/main.js` 读取 CLI；如果作为独立应用启动，可设置 `CODEX_POOL_ROOT` 或 `CODEX_POOL_CLI` 指向项目和 CLI 路径。菜单栏图标位于 `macos/assets/codex-pool-account.png`，缺少资源时自动回退到 SF Symbol。完整邮箱在成功刷新账号信息后写入本地元数据，刷新未成功时显示“邮箱未刷新”，不会回退显示掩码邮箱。
 
-> 外部登录同步：每次读取账号列表前，程序会对比全局 `auth.json` 与账号池的账号指纹。如果匹配已保存账号，会同时原子同步最新凭证和 `active-account`；如果是未导入账号，清空当前标记但不自动创建账号，仍可通过 CLI 的 `account add <alias>` 命令导入。
+> 外部登录同步：每次读取账号列表前，程序会对比全局 `auth.json` 与账号池的账号指纹。如果匹配已保存账号，会同时原子同步最新凭证和 `active-account`，并清除该账号的“需要重新登录”标记；如果是未导入账号，清空当前标记但不自动创建账号，仍可通过 CLI 的 `account add <alias>` 命令导入。如果 Codex App 被手动退出登录导致全局凭证消失，CodexPool 只清空 `active-account`，保留账号记录，不会自动 purge；账号额度查询明确返回认证失败后，会标记“需要重新登录”，并禁用切换入口。
 
 ### 打包 macOS App
 

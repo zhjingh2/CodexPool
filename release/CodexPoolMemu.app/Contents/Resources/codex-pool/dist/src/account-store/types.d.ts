@@ -8,6 +8,8 @@ export interface AccountMetadata {
     planType: string | null;
     addedAt: string;
     updatedAt: string;
+    needsRelogin?: boolean;
+    reloginReason?: string | null;
     primaryQuota?: AccountQuotaWindow | null;
     secondaryQuota?: AccountQuotaWindow | null;
     lastRefreshedAt?: string | null;
@@ -20,7 +22,7 @@ export interface AddAccountResult {
     authMode: string;
     accountDirectory: string;
 }
-export type CredentialStatus = "ok" | "missing" | "invalid";
+export type CredentialStatus = "ok" | "missing" | "invalid" | "needs_login";
 export interface AccountQuotaWindow {
     usedPercent: number;
     remainingPercent: number;

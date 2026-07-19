@@ -13,6 +13,7 @@ export interface ImportAccountOptions {
     poolHome: string;
     now?: () => Date;
     setActiveAccount?: boolean;
+    replaceNeedsRelogin?: boolean;
 }
 export declare function addCurrentAccount(options: AddCurrentAccountOptions): AddAccountResult;
 export declare function importAccountFromHome(options: ImportAccountOptions): AddAccountResult;

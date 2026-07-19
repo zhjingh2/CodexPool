@@ -41,6 +41,8 @@ function createRuntime(poolHome, alias) {
 function updateMetadata(accountDirectory, metadata, snapshot, now) {
     const updated = {
         ...metadata,
+        needsRelogin: false,
+        reloginReason: null,
         email: snapshot.email,
         emailMasked: maskEmail(snapshot.email),
         planType: snapshot.planType,
@@ -52,6 +54,22 @@ function updateMetadata(accountDirectory, metadata, snapshot, now) {
         usageMessage: snapshot.usageError,
     };
     writePrivateFileAtomically(join(accountDirectory, "metadata.json"), `${JSON.stringify(updated, null, 2)}\n`);
+}
+function isAuthenticationFailure(error) {
+    if (!(error instanceof AccountStoreError))
+        return false;
+    const detail = `${error.code} ${error.message}`.toLowerCase();
+    if (error.code !== "APP_SERVER_REQUEST_FAILED")
+        return false;
+    return /(unauthoriz|forbidden|invalid[_ -]?grant|invalid[_ -]?(access|refresh)[ _-]?token|token[^\n]*(expired|invalid)|login required|not authenticated|authentication failed)/u.test(detail);
+}
+function markNeedsRelogin(accountDirectory, metadata, now, reason) {
+    writePrivateFileAtomically(join(accountDirectory, "metadata.json"), `${JSON.stringify({
+        ...metadata,
+        needsRelogin: true,
+        reloginReason: reason,
+        updatedAt: now().toISOString(),
+    }, null, 2)}\n`);
 }
 export async function refreshAccount(options) {
     const alias = validateAccountAlias(options.alias);
@@ -95,6 +113,12 @@ export async function refreshAccount(options) {
             : { ...snapshot, email: extractAuthEmail(emailSourceAuth.toString("utf8")) };
         updateMetadata(accountDirectory, metadata, resolvedSnapshot, options.now ?? (() => new Date()));
         return resolvedSnapshot;
+    }
+    catch (error) {
+        if (isAuthenticationFailure(error)) {
+            markNeedsRelogin(accountDirectory, readAccountMetadata(accountDirectory, alias), options.now ?? (() => new Date()), "登录凭证已失效，请重新登录");
+        }
+        throw error;
     }
     finally {
         try {

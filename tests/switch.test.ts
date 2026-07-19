@@ -189,6 +189,33 @@ test("refuses to switch while Codex processes are running", () => {
   }
 });
 
+test("refuses to switch to an account marked for re-login", () => {
+  const environment = createEnvironment();
+  try {
+    addAccounts(environment);
+    const metadataPath = join(environment.poolHome, "accounts", "personal", "metadata.json");
+    const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
+    metadata.needsRelogin = true;
+    metadata.reloginReason = "登录凭证已失效，请重新登录";
+    writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, { mode: 0o600 });
+
+    assert.throws(
+      () =>
+        switchAccount({
+          alias: "personal",
+          env: { CODEX_HOME: environment.codexHome, CODEX_POOL_HOME: environment.poolHome },
+          userHome: environment.root,
+          processList: () => "",
+          loginStatus: () => true,
+        }),
+      (error: unknown) => error instanceof AccountStoreError && error.code === "ACCOUNT_NEEDS_RELOGIN",
+    );
+    assert.equal(readFileSync(join(environment.codexHome, "auth.json"), "utf8"), authText("account-a"));
+  } finally {
+    environment.cleanup();
+  }
+});
+
 test("does not create an empty account directory when the target is missing", () => {
   const environment = createEnvironment();
   try {

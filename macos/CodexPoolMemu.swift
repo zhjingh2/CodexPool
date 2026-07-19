@@ -280,7 +280,7 @@ private final class PoolModel: ObservableObject {
     }
 
     func switchAccount(_ account: PoolAccount) {
-        guard !isLoading else { return }
+        guard !isLoading, account.credentialStatus == "ok" else { return }
         isLoading = true
         error = nil
         message = "正在切换到 \(account.alias)…"
@@ -295,6 +295,29 @@ private final class PoolModel: ObservableObject {
                     self.message = nil
                     self.error = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? "账号切换失败"
+                        : result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+        }
+    }
+
+    func reloginAccount(_ account: PoolAccount) {
+        guard !isLoading else { return }
+        isLoading = true
+        isRefreshing = false
+        error = nil
+        message = "正在重新登录 \(account.alias)…"
+        Task {
+            let result = await PoolCLI.run(arguments: ["account", "login", account.alias])
+            await MainActor.run {
+                self.isLoading = false
+                if result.exitCode == 0 {
+                    self.message = "已重新登录 \(account.alias)，请刷新账号额度"
+                    self.load(refresh: true)
+                } else {
+                    self.message = nil
+                    self.error = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "账号重新登录失败"
                         : result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
             }
@@ -546,17 +569,18 @@ private struct ContentView: View {
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundStyle(amber)
                 } else {
+                    let canSwitch = model.canSwitchAccount && account.credentialStatus == "ok"
                     Button("切换") {
                         model.switchAccount(account)
                     }
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(model.canSwitchAccount ? .black : .white.opacity(0.45))
+                    .foregroundStyle(canSwitch ? .black : .white.opacity(0.45))
                     .padding(.horizontal, 11)
                     .padding(.vertical, 6)
-                    .background((model.canSwitchAccount ? aqua : Color.white.opacity(0.16)), in: Capsule())
+                    .background((canSwitch ? aqua : Color.white.opacity(0.16)), in: Capsule())
                     .buttonStyle(.plain)
-                    .disabled(!model.canSwitchAccount)
-                    .help(model.canSwitchAccount ? "切换到此账号" : "刷新或其他账号操作进行中，暂不可切换")
+                    .disabled(!canSwitch)
+                    .help(canSwitch ? "切换到此账号" : (account.credentialStatus == "needs_login" ? "请先重新登录此账号" : "刷新或其他账号操作进行中，暂不可切换"))
                 }
                 accountActions(for: account)
             }
@@ -581,6 +605,12 @@ private struct ContentView: View {
 
     private func accountActions(for account: PoolAccount) -> some View {
         Menu {
+            if account.credentialStatus == "needs_login" {
+                Button("重新登录") {
+                    model.reloginAccount(account)
+                }
+                Divider()
+            }
             Button("重命名") {
                 accountToRename = account
             }

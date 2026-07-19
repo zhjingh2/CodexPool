@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { addCurrentAccount, listAccounts } from "../src/account-store/index.js";
+import { AccountStoreError } from "../src/account-store/errors.js";
 import { refreshAccount } from "../src/usage/index.js";
 
 const AUTH_TEXT = `${JSON.stringify(
@@ -154,6 +155,40 @@ test("falls back to the stored ID token when app-server omits the email", async 
     assert.equal(snapshot.email, "token@example.com");
     const account = listAccounts({ env: environment.env, userHome: environment.root })[0];
     assert.equal(account?.email, "token@example.com");
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("marks an account for re-login after an authentication failure", async () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+
+    await assert.rejects(
+      refreshAccount({
+        alias: "work",
+        env: environment.env,
+        userHome: environment.root,
+        query: async () => {
+          throw new AccountStoreError(
+            "APP_SERVER_REQUEST_FAILED",
+            "account/read 请求失败：401 unauthorized",
+          );
+        },
+      }),
+    );
+
+    const account = listAccounts({ env: environment.env, userHome: environment.root })[0];
+    assert.equal(account?.credentialStatus, "needs_login");
+    assert.equal(account?.credentialMessage, "登录凭证已失效，请重新登录");
+    assert.equal(account?.current, true);
   } finally {
     environment.cleanup();
   }

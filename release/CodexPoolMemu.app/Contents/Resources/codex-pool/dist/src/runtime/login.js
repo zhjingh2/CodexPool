@@ -38,6 +38,7 @@ export function loginAccount(options) {
             authHome: runtimeDirectory,
             poolHome,
             setActiveAccount: false,
+            replaceNeedsRelogin: true,
         };
         if (options.now) {
             return importAccountFromHome({ ...importOptions, now: options.now });

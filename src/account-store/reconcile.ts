@@ -15,7 +15,10 @@ import type { AccountMetadata } from "./types.js";
 export interface ReconcileCurrentAccountOptions {
   poolHome: string;
   activeAlias: string | null;
-  accounts: readonly Pick<AccountMetadata, "alias" | "accountFingerprint">[];
+  accounts: readonly Pick<
+    AccountMetadata,
+    "alias" | "accountFingerprint" | "needsRelogin"
+  >[];
   env?: NodeJS.ProcessEnv;
   userHome?: string;
 }
@@ -61,8 +64,16 @@ export function reconcileCurrentAccount(
   const codexHome = resolveCodexHome(env, options.userHome ?? homedir());
   const globalAuth = readGlobalAuth(codexHome);
   if (!globalAuth) {
+    if (options.activeAlias !== null) {
+      const releaseLock = acquirePoolLock(options.poolHome);
+      try {
+        writePrivateFileAtomically(join(options.poolHome, "active-account"), "");
+      } finally {
+        releaseLock();
+      }
+    }
     return {
-      activeAlias: options.activeAlias,
+      activeAlias: null,
       status: "unavailable",
       credentialsSynced: false,
     };
@@ -124,6 +135,26 @@ export function reconcileCurrentAccount(
   try {
     if (credentialsSynced) {
       writePrivateFileAtomically(targetAuthPath, globalAuth.content);
+    }
+    if (matched.needsRelogin && credentialsSynced) {
+      const metadataPath = join(
+        getAccountDirectory(options.poolHome, matched.alias),
+        "metadata.json",
+      );
+      const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as AccountMetadata;
+      writePrivateFileAtomically(
+        metadataPath,
+        `${JSON.stringify(
+          {
+            ...metadata,
+            needsRelogin: false,
+            reloginReason: null,
+            updatedAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        )}\n`,
+      );
     }
     if (nextAlias !== options.activeAlias) {
       writePrivateFileAtomically(join(options.poolHome, "active-account"), `${nextAlias}\n`);

@@ -91,6 +91,12 @@ function inspectCredential(accountDirectory: string, metadata: AccountMetadata):
     if (identity.fingerprint !== metadata.accountFingerprint) {
       return { status: "invalid", message: "auth.json 与 metadata.json 指纹不一致" };
     }
+    if (metadata.needsRelogin) {
+      return {
+        status: "needs_login",
+        message: metadata.reloginReason ?? "登录凭证已失效，请重新登录",
+      };
+    }
     return { status: "ok", message: null };
   } catch (error) {
     return {
@@ -131,14 +137,26 @@ export function listAccounts(options: ListAccountsOptions = {}): AccountSummary[
       credentialMessage: credential.message,
     });
   }
-  const activeAlias = reconcileCurrentAccount({
+  const reconciliation = reconcileCurrentAccount({
     poolHome,
     activeAlias: readActiveAlias(poolHome),
     accounts,
     env,
     userHome: options.userHome ?? homedir(),
-  }).activeAlias;
+  });
+  const activeAlias = reconciliation.activeAlias;
   return accounts
-    .map((account) => ({ ...account, current: activeAlias === account.alias }))
+    .map((account) => ({
+      ...account,
+      current: activeAlias === account.alias,
+      ...(activeAlias === account.alias && reconciliation.credentialsSynced && account.needsRelogin
+        ? {
+            needsRelogin: false,
+            reloginReason: null,
+            credentialStatus: "ok" as const,
+            credentialMessage: null,
+          }
+        : {}),
+    }))
     .sort((left, right) => left.alias.localeCompare(right.alias));
 }

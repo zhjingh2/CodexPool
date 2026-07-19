@@ -7,7 +7,7 @@ import { AccountStoreError } from "../account-store/errors.js";
 import { acquirePoolLock, assertRegularPrivateSourceFile, ensurePrivateDirectory, writePrivateFileAtomically, } from "../account-store/files.js";
 import { parseAuthIdentity } from "../account-store/auth.js";
 import { getAccountDirectory, resolvePoolHome, validateAccountAlias, } from "../account-store/paths.js";
-import { listAccounts } from "../account-store/list.js";
+import { listAccounts, readAccountMetadata } from "../account-store/list.js";
 import { resolveCodexHome } from "../preflight/doctor.js";
 import { detectCredentialStoreMode } from "../preflight/config.js";
 import { summarizeCodexProcesses } from "../preflight/processes.js";
@@ -157,6 +157,10 @@ export function switchAccount(options) {
             throw new AccountStoreError("FILE_STORE_REQUIRED", "switch 要求 cli_auth_credentials_store 显式配置为 file");
         }
         const targetMetadataFingerprint = readStoredFingerprint(poolHome, alias);
+        const targetMetadata = readAccountMetadata(targetDirectory, alias);
+        if (targetMetadata.needsRelogin) {
+            throw new AccountStoreError("ACCOUNT_NEEDS_RELOGIN", `账号 ${alias} 的登录凭证已失效，请先重新登录该账号`);
+        }
         assertRegularPrivateSourceFile(targetAuthPath);
         const targetIdentity = parseAuthIdentity(readFileSync(targetAuthPath, "utf8"));
         if (targetIdentity.fingerprint !== targetMetadataFingerprint) {
