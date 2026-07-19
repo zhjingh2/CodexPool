@@ -31,6 +31,7 @@ const REFRESHED_AUTH_TEXT = AUTH_TEXT.replace("access-before", "access-after").r
   "refresh-before",
   "refresh-after",
 );
+const SECOND_AUTH_TEXT = AUTH_TEXT.replace("usage-account", "usage-account-2");
 
 function createEnvironment() {
   const root = mkdtempSync(join(tmpdir(), "codex-pool-usage-test-"));
@@ -189,6 +190,59 @@ test("marks an account for re-login after an authentication failure", async () =
     assert.equal(account?.credentialStatus, "needs_login");
     assert.equal(account?.credentialMessage, "登录凭证已失效，请重新登录");
     assert.equal(account?.current, true);
+  } finally {
+    environment.cleanup();
+  }
+});
+
+test("allows separate account refreshes to run concurrently without sharing runtime directories", async () => {
+  const environment = createEnvironment();
+  try {
+    addCurrentAccount({
+      alias: "work",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+    writeFileSync(join(environment.codexHome, "auth.json"), SECOND_AUTH_TEXT, { mode: 0o600 });
+    addCurrentAccount({
+      alias: "personal",
+      env: environment.env,
+      userHome: environment.root,
+      processList: () => "",
+      loginStatus: () => true,
+    });
+
+    let activeQueries = 0;
+    let peakQueries = 0;
+    const query = async () => {
+      activeQueries += 1;
+      peakQueries = Math.max(peakQueries, activeQueries);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      activeQueries -= 1;
+      return {
+        email: null,
+        planType: "pro",
+        primary: null,
+        secondary: null,
+        usage: null,
+        dailyUsageBuckets: null,
+        usageStatus: "unavailable" as const,
+        usageError: "not requested in test",
+        fetchedAt: "2026-07-18T12:00:00.000Z",
+      };
+    };
+
+    await Promise.all([
+      refreshAccount({ alias: "work", env: environment.env, userHome: environment.root, query }),
+      refreshAccount({ alias: "personal", env: environment.env, userHome: environment.root, query }),
+    ]);
+
+    assert.equal(peakQueries, 2);
+    assert.equal(existsSync(join(environment.poolHome, "pool.lock")), false);
+    assert.deepEqual(readdirSync(join(environment.poolHome, "runtime", "work")), []);
+    assert.deepEqual(readdirSync(join(environment.poolHome, "runtime", "personal")), []);
   } finally {
     environment.cleanup();
   }

@@ -13,7 +13,7 @@ Usage:
   codex-pool doctor [--json]
   codex-pool account add <alias> [--json]
   codex-pool account login <alias>
-  codex-pool account list [--refresh] [--json]
+  codex-pool account list [--refresh] [--force] [--json]
   codex-pool account rename <from> <to>
   codex-pool account purge <alias>
   codex-pool switch <alias> [--launch]
@@ -47,6 +47,14 @@ function renderAccounts(accounts, json) {
     }
     return `${lines.join("\n")}\n`;
 }
+const REFRESH_CACHE_TTL_MS = 5 * 60 * 1_000;
+const REFRESH_CONCURRENCY = 3;
+function isRecentlyRefreshed(lastRefreshedAt, now) {
+    if (!lastRefreshedAt)
+        return false;
+    const timestamp = Date.parse(lastRefreshedAt);
+    return Number.isFinite(timestamp) && timestamp <= now && now - timestamp < REFRESH_CACHE_TTL_MS;
+}
 async function main(args) {
     const [command, ...options] = args;
     if (!command || command === "--help" || command === "-h") {
@@ -73,7 +81,7 @@ async function main(args) {
         const [action, alias, ...accountOptions] = options;
         if (action === "list") {
             const listOptions = (alias ? [alias, ...accountOptions] : accountOptions);
-            const unknownOption = listOptions.find((option) => option !== "--json" && option !== "--refresh");
+            const unknownOption = listOptions.find((option) => option !== "--json" && option !== "--refresh" && option !== "--force");
             if (unknownOption) {
                 process.stderr.write(`Unknown option: ${unknownOption}\n`);
                 return 2;
@@ -81,21 +89,33 @@ async function main(args) {
             try {
                 const json = listOptions.includes("--json");
                 const refresh = listOptions.includes("--refresh");
+                const force = listOptions.includes("--force");
                 let refreshFailed = false;
                 if (refresh) {
-                    for (const account of listAccounts()) {
-                        try {
-                            const snapshot = await refreshAccount({ alias: account.alias });
-                            if (snapshot.usageStatus === "unavailable") {
-                                process.stderr.write(`账号 ${account.alias} token 用量暂不可用，套餐和额度已更新。\n`);
+                    const now = Date.now();
+                    const accountsToRefresh = listAccounts().filter((account) => account.credentialStatus === "ok" &&
+                        (force || !isRecentlyRefreshed(account.lastRefreshedAt, now)));
+                    let nextIndex = 0;
+                    const refreshWorker = async () => {
+                        while (nextIndex < accountsToRefresh.length) {
+                            const account = accountsToRefresh[nextIndex];
+                            nextIndex += 1;
+                            if (!account)
+                                return;
+                            try {
+                                const snapshot = await refreshAccount({ alias: account.alias });
+                                if (snapshot.usageStatus === "unavailable") {
+                                    process.stderr.write(`账号 ${account.alias} token 用量暂不可用，套餐和额度已更新。\n`);
+                                }
+                            }
+                            catch (error) {
+                                refreshFailed = true;
+                                const message = error instanceof Error ? error.message : "未知错误";
+                                process.stderr.write(`账号 ${account.alias} 刷新失败：${message}\n`);
                             }
                         }
-                        catch (error) {
-                            refreshFailed = true;
-                            const message = error instanceof Error ? error.message : "未知错误";
-                            process.stderr.write(`账号 ${account.alias} 刷新失败：${message}\n`);
-                        }
-                    }
+                    };
+                    await Promise.all(Array.from({ length: Math.min(REFRESH_CONCURRENCY, accountsToRefresh.length) }, () => refreshWorker()));
                 }
                 process.stdout.write(renderAccounts(listAccounts(), json));
                 return refreshFailed ? 1 : 0;
@@ -167,7 +187,7 @@ async function main(args) {
         if ((action !== "add" && action !== "login") || !alias) {
             process.stderr.write("Usage: codex-pool account add <alias> [--json]\n" +
                 "       codex-pool account login <alias>\n" +
-                "       codex-pool account list [--refresh] [--json]\n" +
+                "       codex-pool account list [--refresh] [--force] [--json]\n" +
                 "       codex-pool account rename <from> <to>\n" +
                 "       codex-pool account purge <alias>\n");
             return 2;

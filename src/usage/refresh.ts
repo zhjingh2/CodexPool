@@ -125,22 +125,35 @@ export async function refreshAccount(options: RefreshAccountOptions): Promise<Ac
   const poolHome = resolvePoolHome(env, userHome);
   const accountDirectory = getAccountDirectory(poolHome, alias);
   const authPath = join(accountDirectory, "auth.json");
-  const releaseLock = acquirePoolLock(poolHome);
   let runtimeDirectory: string | undefined;
+  let context:
+    | { metadata: AccountMetadata; storedAuth: Buffer }
+    | undefined;
   try {
-    const metadata = readAccountMetadata(accountDirectory, alias);
-    assertRegularPrivateSourceFile(authPath);
-    const storedAuth = readFileSync(authPath);
-    const storedIdentity = parseAuthIdentity(storedAuth.toString("utf8"));
-    if (storedIdentity.fingerprint !== metadata.accountFingerprint) {
-      throw new AccountStoreError(
-        "ACCOUNT_METADATA_MISMATCH",
-        `账号 ${alias} 的 auth.json 与 metadata.json 指纹不一致，请先修复账号仓库`,
-      );
+    const releaseLock = acquirePoolLock(poolHome);
+    try {
+      const metadata = readAccountMetadata(accountDirectory, alias);
+      assertRegularPrivateSourceFile(authPath);
+      const storedAuth = readFileSync(authPath);
+      const storedIdentity = parseAuthIdentity(storedAuth.toString("utf8"));
+      if (storedIdentity.fingerprint !== metadata.accountFingerprint) {
+        throw new AccountStoreError(
+          "ACCOUNT_METADATA_MISMATCH",
+          `账号 ${alias} 的 auth.json 与 metadata.json 指纹不一致，请先修复账号仓库`,
+        );
+      }
+
+      runtimeDirectory = createRuntime(poolHome, alias);
+      writePrivateFileAtomically(join(runtimeDirectory, "auth.json"), storedAuth);
+      context = { metadata, storedAuth };
+    } finally {
+      releaseLock();
     }
 
-    runtimeDirectory = createRuntime(poolHome, alias);
-    writePrivateFileAtomically(join(runtimeDirectory, "auth.json"), storedAuth);
+    if (!context || !runtimeDirectory) {
+      throw new AccountStoreError("REFRESH_CONTEXT_MISSING", `账号 ${alias} 刷新上下文创建失败`);
+    }
+    const { metadata, storedAuth } = context;
     const snapshot = await (options.query ?? queryAccountServer)({
       codexHome: runtimeDirectory,
       env,
@@ -158,33 +171,73 @@ export async function refreshAccount(options: RefreshAccountOptions): Promise<Ac
           `账号 ${alias} 的 app-server 刷新结果属于其他账号，已拒绝写回`,
         );
       }
-      if (!refreshedAuth.equals(storedAuth)) {
-        writePrivateFileAtomically(authPath, refreshedAuth);
-      }
       emailSourceAuth = refreshedAuth;
     }
     const resolvedSnapshot = snapshot.email
       ? snapshot
       : { ...snapshot, email: extractAuthEmail(emailSourceAuth.toString("utf8")) };
-    updateMetadata(accountDirectory, metadata, resolvedSnapshot, options.now ?? (() => new Date()));
+
+    // 网络查询期间不持有全局锁；写回前重新校验账号仍是同一份凭证，避免与
+    // 切换、重命名、重新登录或 purge 并发时覆盖其他操作的结果。
+    const commitReleaseLock = acquirePoolLock(poolHome);
+    try {
+      const currentMetadata = readAccountMetadata(accountDirectory, alias);
+      if (currentMetadata.accountFingerprint !== metadata.accountFingerprint) {
+        throw new AccountStoreError(
+          "ACCOUNT_CHANGED_DURING_REFRESH",
+          `账号 ${alias} 在刷新期间已更换，已放弃写回旧结果`,
+        );
+      }
+      assertRegularPrivateSourceFile(authPath);
+      const currentAuth = readFileSync(authPath);
+      const currentIdentity = parseAuthIdentity(currentAuth.toString("utf8"));
+      if (
+        currentIdentity.fingerprint !== metadata.accountFingerprint ||
+        !currentAuth.equals(storedAuth)
+      ) {
+        throw new AccountStoreError(
+          "ACCOUNT_CHANGED_DURING_REFRESH",
+          `账号 ${alias} 在刷新期间已更新，已放弃覆盖新凭证`,
+        );
+      }
+      if (!emailSourceAuth.equals(storedAuth)) {
+        writePrivateFileAtomically(authPath, emailSourceAuth);
+      }
+      updateMetadata(
+        accountDirectory,
+        currentMetadata,
+        resolvedSnapshot,
+        options.now ?? (() => new Date()),
+      );
+    } finally {
+      commitReleaseLock();
+    }
     return resolvedSnapshot;
   } catch (error) {
-    if (isAuthenticationFailure(error)) {
-      markNeedsRelogin(
-        accountDirectory,
-        readAccountMetadata(accountDirectory, alias),
-        options.now ?? (() => new Date()),
-        "登录凭证已失效，请重新登录",
-      );
+    if (isAuthenticationFailure(error) && context) {
+      try {
+        const markReleaseLock = acquirePoolLock(poolHome);
+        try {
+          const currentMetadata = readAccountMetadata(accountDirectory, alias);
+          if (currentMetadata.accountFingerprint === context.metadata.accountFingerprint) {
+            markNeedsRelogin(
+              accountDirectory,
+              currentMetadata,
+              options.now ?? (() => new Date()),
+              "登录凭证已失效，请重新登录",
+            );
+          }
+        } finally {
+          markReleaseLock();
+        }
+      } catch {
+        // 保留原始刷新错误；账号可能已被并发重命名或 purge。
+      }
     }
     throw error;
   } finally {
-    try {
-      if (runtimeDirectory) {
-        rmSync(runtimeDirectory, { force: true, recursive: true });
-      }
-    } finally {
-      releaseLock();
+    if (runtimeDirectory) {
+      rmSync(runtimeDirectory, { force: true, recursive: true });
     }
   }
 }

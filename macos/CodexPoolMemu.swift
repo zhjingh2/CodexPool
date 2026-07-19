@@ -250,13 +250,16 @@ private final class PoolModel: ObservableObject {
         return formatter
     }()
 
-    func load(refresh: Bool = false) {
+    func load(refresh: Bool = false, force: Bool = false) {
         guard !isLoading else { return }
         isLoading = true
         isRefreshing = refresh
         error = nil
         Task {
-            let arguments = refresh ? ["account", "list", "--refresh", "--json"] : ["account", "list", "--json"]
+            var arguments = refresh ? ["account", "list", "--refresh", "--json"] : ["account", "list", "--json"]
+            if force {
+                arguments.insert("--force", at: 3)
+            }
             let result = await PoolCLI.run(arguments: arguments)
             await MainActor.run {
                 self.isLoading = false
@@ -265,7 +268,9 @@ private final class PoolModel: ObservableObject {
                    let decoded = try? JSONDecoder().decode([PoolAccount].self, from: data) {
                     self.accounts = decoded
                     self.message = refresh && result.exitCode == 0
-                        ? "额度于 \(Self.refreshTimeFormatter.string(from: Date())) 更新"
+                        ? (force
+                            ? "额度于 \(Self.refreshTimeFormatter.string(from: Date())) 更新"
+                            : "账号列表已加载，近期额度保持缓存")
                         : nil
                     if result.exitCode != 0 {
                         self.error = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -313,7 +318,7 @@ private final class PoolModel: ObservableObject {
                 self.isLoading = false
                 if result.exitCode == 0 {
                     self.message = "已重新登录 \(account.alias)，请刷新账号额度"
-                    self.load(refresh: true)
+                    self.load(refresh: true, force: true)
                 } else {
                     self.message = nil
                     self.error = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -495,7 +500,7 @@ private struct ContentView: View {
             .disabled(model.isLoading)
             .help("登录并添加新 Codex 账号")
             Button {
-                model.load(refresh: true)
+                model.load(refresh: true, force: true)
             } label: {
                 Group {
                     if model.isRefreshing {

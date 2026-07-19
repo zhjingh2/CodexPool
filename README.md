@@ -66,9 +66,10 @@ node dist/src/cli/main.js account rename work company
 node dist/src/cli/main.js account list
 node dist/src/cli/main.js account list --json
 node dist/src/cli/main.js account list --refresh
+node dist/src/cli/main.js account list --refresh --force
 ```
 
-默认列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；`--refresh` 会为每个账号创建隔离临时 `CODEX_HOME`，启动短生命周期 app-server，查询套餐、额度、重置时间和用量后更新缓存。如果 token 用量档案暂时不可用，套餐和额度仍会更新，用量状态显示为“暂不可用”。
+默认列表读取本地账号元数据和凭证健康状态，并标记当前激活账号；`--refresh` 会为凭证正常且超过 5 分钟未更新的账号创建隔离临时 `CODEX_HOME`，最多并发刷新 3 个账号，启动短生命周期 app-server，查询套餐、额度、重置时间和用量后更新缓存。`--force` 会忽略 5 分钟缓存，强制刷新所有凭证正常的账号；凭证缺失、损坏或需要重新登录的账号会自动跳过。如果 token 用量档案暂时不可用，套餐和额度仍会更新，用量状态显示为“暂不可用”。
 
 ## 永久清理账号
 
