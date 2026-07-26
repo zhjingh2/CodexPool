@@ -77,7 +77,7 @@ async function main(args: string[]): Promise<number> {
   }
 
   if (command === "--version" || command === "-V") {
-    process.stdout.write("0.1.1\n");
+    process.stdout.write("0.1.2\n");
     return 0;
   }
 

@@ -341,7 +341,7 @@ export async function queryAccountServer(options: AccountServerOptions): Promise
       id: 1,
       method: "initialize",
       params: {
-        clientInfo: { name: "codex-pool", version: "0.1.1" },
+        clientInfo: { name: "codex-pool", version: "0.1.2" },
         capabilities: { experimentalApi: true },
       },
     })}\n`);

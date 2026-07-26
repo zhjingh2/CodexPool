@@ -1,6 +1,6 @@
 # Codex Pool 项目技术文档
 
-> 版本：`0.1.1`
+> 版本：`0.1.2`
 > 当前状态：CLI、额度查询和 macOS 菜单栏 App 已可用  
 > 支持平台：macOS  
 > 文档依据：当前源码、测试和构建脚本
@@ -199,7 +199,7 @@ codex-pool --help
 codex-pool --version
 ```
 
-`--help` 输出命令用法，`--version` 输出当前版本 `0.1.1`。
+`--help` 输出命令用法，`--version` 输出当前版本 `0.1.2`。
 
 ### 6.2 `doctor [--json]`
 
@@ -500,9 +500,9 @@ npm run menu:app
 mkdir -p dist/releases
 ditto -c -k --sequesterRsrc --keepParent \
   .build/CodexPoolMemu.app \
-  dist/releases/CodexPoolMemu-0.1.1-macos-universal.zip
-shasum -a 256 dist/releases/CodexPoolMemu-0.1.1-macos-universal.zip \
-  > dist/releases/SHA256SUMS.txt
+  dist/releases/CodexPoolMemu-0.1.2-macos-universal.zip
+shasum -a 256 dist/releases/CodexPoolMemu-0.1.2-macos-universal.zip \
+  > dist/releases/SHA256SUMS-0.1.2.txt
 ```
 
 然后将 ZIP 和校验文件上传到 GitHub Release。仓库当前已发布的版本位于：

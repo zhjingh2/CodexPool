@@ -2,6 +2,9 @@
 
 Codex Pool 是一个面向 macOS 的本地 Codex 多账号管理工具，支持账号导入、官方登录、额度查看和安全切换。
 
+v0.1.2 起，添加和切换账号直接使用 `CODEX_HOME/auth.json`，不再要求在
+`config.toml` 中显式配置 `cli_auth_credentials_store = "file"`。
+
 想了解实现原理、工程结构、CLI 细节和 macOS 构建过程，请阅读[项目技术文档](docs/PROJECT_DOCUMENTATION.md)。
 
 ## macOS App
@@ -19,7 +22,7 @@ CodexPoolMemu 是一个常驻 macOS 菜单栏的账号控制台，支持：
 
 前往 [GitHub Releases](https://github.com/zhjingh2/CodexPool/releases) 下载最新版本：
 
-[下载 CodexPoolMemu v0.1.1（Intel + Apple Silicon）](https://github.com/zhjingh2/CodexPool/releases/download/v0.1.1/CodexPoolMemu-0.1.1-macos-universal.zip)
+[下载 CodexPoolMemu v0.1.2（Intel + Apple Silicon）](https://github.com/zhjingh2/CodexPool/releases/download/v0.1.2/CodexPoolMemu-0.1.2-macos-universal.zip)
 
 解压后将 `CodexPoolMemu.app` 拖入“应用程序”文件夹即可。
 
