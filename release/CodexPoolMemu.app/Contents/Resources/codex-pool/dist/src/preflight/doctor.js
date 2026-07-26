@@ -3,7 +3,6 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, }
 import { homedir, platform as currentPlatform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { redactSensitiveText } from "../security/redact.js";
-import { detectCredentialStoreMode } from "./config.js";
 import { summarizeCodexProcesses } from "./processes.js";
 function defaultRun(command, args, env = process.env) {
     const result = spawnSync(command, args, {
@@ -102,7 +101,6 @@ export function runDoctor(dependencies = createDefaultDoctorDependencies()) {
     const checks = [];
     const codexHome = resolveCodexHome(dependencies.env, dependencies.homeDir);
     const authPath = join(codexHome, "auth.json");
-    const configPath = join(codexHome, "config.toml");
     const journalPath = join(dependencies.homeDir, ".codex-pool", "switch-journal.json");
     const codexEnv = { ...dependencies.env, CODEX_HOME: codexHome };
     checks.push({
@@ -151,30 +149,6 @@ export function runDoctor(dependencies = createDefaultDoctorDependencies()) {
                     : `${modeText}，建议设置为 600`,
         });
     }
-    const configText = dependencies.pathExists(configPath)
-        ? dependencies.readText(configPath)
-        : "";
-    const credentialStoreMode = detectCredentialStoreMode(configText);
-    checks.push({
-        id: "credential-store",
-        label: "Credential store",
-        status: credentialStoreMode === "file"
-            ? "pass"
-            : credentialStoreMode === "keyring"
-                ? "fail"
-                : authExists
-                    ? "warning"
-                    : "fail",
-        summary: credentialStoreMode === "file"
-            ? "file（已显式配置）"
-            : credentialStoreMode === "keyring"
-                ? "keyring（MVP 暂不支持）"
-                : credentialStoreMode === "auto"
-                    ? "auto；检测到 auth.json，但建议显式固定为 file"
-                    : authExists
-                        ? "未显式配置；检测到 auth.json，建议固定为 file"
-                        : "无法确认文件凭证模式",
-    });
     if (codexAvailable && authExists) {
         const loginResult = dependencies.run("codex", ["login", "status"], codexEnv);
         checks.push({

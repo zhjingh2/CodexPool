@@ -31,7 +31,6 @@ Codex Pool 是一个本地运行的 Codex 多账号管理工具。它不提供�
 ### 2.2 非目标和当前限制
 
 - 仅支持 macOS；
-- 目前要求 Codex 使用文件凭证模式：`cli_auth_credentials_store = "file"`；
 - 不支持 Codex App 运行期间的热切换；
 - 不实现账号自动轮换、并发使用或平台限制绕过；
 - 不删除共享的 Codex 会话、项目、插件或 SQLite 状态；
@@ -70,7 +69,7 @@ SwiftUI 菜单栏 App ── macOS open -a ──> Codex/ChatGPT App
 
 ### 3.1 主要数据流
 
-- **导入当前账号**：读取 `CODEX_HOME/auth.json`，验证文件凭证和登录状态，计算账号指纹，然后复制到账号仓库；
+- **导入当前账号**：读取 `CODEX_HOME/auth.json`，验证凭证文件和登录状态，计算账号指纹，然后复制到账号仓库；
 - **登录新账号**：创建隔离的临时 `CODEX_HOME`，调用官方 `codex login`，登录成功后再将临时凭证导入账号仓库，最后清理临时目录；
 - **查看账号**：读取元数据和凭证健康状态，并将全局 `auth.json` 的真实指纹与 `active-account` 对账；
 - **刷新额度**：为每个账号创建独立临时运行目录，启动短生命周期 app-server，通过 JSON-RPC 获取账号、额度和用量，必要时写回刷新后的凭证和元数据；
@@ -210,11 +209,10 @@ codex-pool --version
 2. `codex` 命令是否可执行及其版本；
 3. `CODEX_HOME` 是否存在；
 4. `auth.json` 是否存在、权限是否安全；
-5. `cli_auth_credentials_store` 是否显式为 `file`；
-6. 当前登录状态是否有效；
-7. ChatGPT/Codex App 和 app-server 是否仍在运行；
-8. app-server 是否提供 `account/read`、`account/rateLimits/read`、`account/usage/read`；
-9. 是否残留未完成的切换 journal。
+5. 当前登录状态是否有效；
+6. ChatGPT/Codex App 和 app-server 是否仍在运行；
+7. app-server 是否提供 `account/read`、`account/rateLimits/read`、`account/usage/read`；
+8. 是否残留未完成的切换 journal。
 
 默认输出人类可读报告，`--json` 输出机器可读报告。存在 `fail` 检查时退出码为 `1`，否则为 `0`。
 
@@ -225,14 +223,13 @@ codex-pool --version
 执行逻辑：
 
 1. 校验别名格式并阻止路径穿越；
-2. 检查 `config.toml` 中的文件凭证模式；
-3. 运行 `codex login status` 确认当前账号可用；
-4. 检查 `auth.json` 是否是权限安全的普通文件；
-5. 解析 JSON，验证 `account_id`、access token 和 refresh token；
-6. 由 `account_id` 计算 SHA-256 指纹；
-7. 拒绝重复别名和已被其他别名保存的同一账号；
-8. 原子写入账号目录中的 `auth.json` 和 `metadata.json`；
-9. 默认更新 `active-account`。
+2. 运行 `codex login status` 确认当前账号可用；
+3. 检查 `auth.json` 是否是权限安全的普通文件；
+4. 解析 JSON，验证 `account_id`、access token 和 refresh token；
+5. 由 `account_id` 计算 SHA-256 指纹；
+6. 拒绝重复别名和已被其他别名保存的同一账号；
+7. 原子写入账号目录中的 `auth.json` 和 `metadata.json`；
+8. 默认更新 `active-account`。
 
 该命令只读取并复制当前凭证，不要求退出 Codex App；但后续 `switch` 仍然要求退出 Codex App 和 app-server。
 
@@ -564,7 +561,7 @@ prepared
 | `switch.test.ts` | 原子切换、验证失败回滚、journal 恢复、进程保护 |
 | `usage.test.ts` | 临时运行时、额度写回、邮箱回退、重新登录标记、并发刷新 |
 | `app-server.test.ts` | JSON-RPC 顺序、重试、用量降级、子进程关闭 |
-| `preflight.test.ts` | 环境检查、凭证模式、权限、进程摘要和脱敏 |
+| `preflight.test.ts` | 环境检查、凭证权限、进程摘要和脱敏 |
 
 运行：
 
@@ -575,16 +572,6 @@ npm test
 测试通过后再执行 `npm run menu:app` 进行 App Bundle 构建。由于菜单栏 UI 和真实 Codex app-server 依赖 macOS 环境，完整发布前仍应进行一次手工验收：打开 App、登录一个测试账号、刷新额度、切换账号，再确认失败场景不会破坏旧凭证。
 
 ## 12. 常见问题与排查
-
-### `FILE_STORE_REQUIRED`
-
-Codex 当前没有显式使用文件凭证模式。编辑 `CODEX_HOME/config.toml`，加入：
-
-```toml
-cli_auth_credentials_store = "file"
-```
-
-然后重新运行 `npm run doctor`。
 
 ### `CODEX_RUNNING`
 

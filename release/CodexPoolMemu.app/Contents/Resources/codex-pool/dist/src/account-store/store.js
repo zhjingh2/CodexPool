@@ -3,7 +3,6 @@ import { existsSync, readFileSync, readdirSync, rmSync, } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { resolveCodexHome } from "../preflight/doctor.js";
-import { detectCredentialStoreMode } from "../preflight/config.js";
 import { parseAuthIdentity } from "./auth.js";
 import { readAccountMetadata } from "./list.js";
 import { AccountStoreError } from "./errors.js";
@@ -62,14 +61,6 @@ export function addCurrentAccount(options) {
     const now = options.now ?? (() => new Date());
     const codexHome = resolveCodexHome(env, userHome);
     const poolHome = resolvePoolHome(env, userHome);
-    const configPath = join(codexHome, "config.toml");
-    if (!existsSync(configPath)) {
-        throw new AccountStoreError("CONFIG_NOT_FOUND", "当前 CODEX_HOME 中不存在 config.toml");
-    }
-    const credentialStoreMode = detectCredentialStoreMode(readFileSync(configPath, "utf8"));
-    if (credentialStoreMode !== "file") {
-        throw new AccountStoreError("FILE_STORE_REQUIRED", "account add 要求 cli_auth_credentials_store 显式配置为 file");
-    }
     if (!(options.loginStatus ?? defaultLoginStatus)(codexHome, env)) {
         throw new AccountStoreError("NOT_LOGGED_IN", "当前 CODEX_HOME 的登录状态无效，请先使用官方 codex login 完成登录");
     }
