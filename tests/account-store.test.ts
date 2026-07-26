@@ -33,7 +33,7 @@ interface TestEnvironment {
   cleanup(): void;
 }
 
-function createTestEnvironment(storeMode = "file"): TestEnvironment {
+function createTestEnvironment(): TestEnvironment {
   const root = mkdtempSync(join(tmpdir(), "codex-pool-account-test-"));
   const codexHome = join(root, "codex-home");
   const poolHome = join(root, "pool-home");
@@ -41,11 +41,6 @@ function createTestEnvironment(storeMode = "file"): TestEnvironment {
   const authText = `${JSON.stringify(AUTH_DOCUMENT, null, 2)}\n`;
   writeFileSync(join(codexHome, "auth.json"), authText, { mode: 0o600 });
   chmodSync(join(codexHome, "auth.json"), 0o600);
-  writeFileSync(
-    join(codexHome, "config.toml"),
-    `cli_auth_credentials_store = "${storeMode}"\n`,
-    { mode: 0o600 },
-  );
   return {
     root,
     codexHome,
@@ -145,14 +140,11 @@ test("rejects duplicate aliases and duplicate account fingerprints", () => {
   }
 });
 
-test("requires explicit file credential storage", () => {
-  const environment = createTestEnvironment("auto");
+test("imports the current account without config.toml", () => {
+  const environment = createTestEnvironment();
   try {
-    assert.throws(
-      () => addInTestEnvironment(environment, "work"),
-      (error: unknown) =>
-        error instanceof AccountStoreError && error.code === "FILE_STORE_REQUIRED",
-    );
+    const result = addInTestEnvironment(environment, "work");
+    assert.equal(result.alias, "work");
   } finally {
     environment.cleanup();
   }

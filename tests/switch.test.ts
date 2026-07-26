@@ -41,9 +41,6 @@ function createEnvironment(): {
   const codexHome = join(root, "codex-home");
   const poolHome = join(root, "pool-home");
   mkdirSync(codexHome, { mode: 0o700 });
-  writeFileSync(join(codexHome, "config.toml"), 'cli_auth_credentials_store = "file"\n', {
-    mode: 0o600,
-  });
   writeFileSync(join(codexHome, "auth.json"), authText("account-a"), { mode: 0o600 });
   chmodSync(join(codexHome, "auth.json"), 0o600);
   return { root, codexHome, poolHome, cleanup: () => rmSync(root, { force: true, recursive: true }) };
@@ -69,7 +66,7 @@ function addAccounts(environment: ReturnType<typeof createEnvironment>): void {
   });
 }
 
-test("switches auth.json atomically and updates active-account after verification", () => {
+test("switches auth.json without config.toml and updates active-account after verification", () => {
   const environment = createEnvironment();
   try {
     addAccounts(environment);

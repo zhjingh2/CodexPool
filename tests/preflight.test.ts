@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectCredentialStoreMode } from "../src/preflight/config.js";
 import {
   formatFileMode,
   resolveCodexHome,
@@ -19,18 +18,6 @@ test("resolves CODEX_HOME and defaults to ~/.codex", () => {
     resolveCodexHome({ CODEX_HOME: "/tmp/codex-a" }, "/Users/example"),
     "/tmp/codex-a",
   );
-});
-
-test("detects explicit credential store modes without parsing secrets", () => {
-  assert.equal(
-    detectCredentialStoreMode('cli_auth_credentials_store = "file"'),
-    "file",
-  );
-  assert.equal(
-    detectCredentialStoreMode("cli_auth_credentials_store = 'keyring'"),
-    "keyring",
-  );
-  assert.equal(detectCredentialStoreMode("# cli_auth_credentials_store = 'file'"), "unknown");
 });
 
 test("formats credential file permissions", () => {
@@ -67,14 +54,11 @@ test("doctor can run entirely against injected fake dependencies", () => {
     platform: "darwin",
     pathExists: (path) =>
       path === "/Users/example/.codex" ||
-      path === "/Users/example/.codex/auth.json" ||
-      path === "/Users/example/.codex/config.toml",
+      path === "/Users/example/.codex/auth.json",
     readText: (path) =>
       path === schemaPath
         ? "account/read account/rateLimits/read account/usage/read"
-        : path === "/Users/example/.codex/config.toml"
-          ? 'cli_auth_credentials_store = "file"\n'
-          : "",
+        : "",
     fileMode: () => 0o600,
     run: (command, args) => {
       if (command === "codex" && args[0] === "--version") {
@@ -100,5 +84,5 @@ test("doctor can run entirely against injected fake dependencies", () => {
   const report = runDoctor(dependencies);
   assert.equal(report.ready, true);
   assert.equal(report.checks.find((check) => check.id === "app-server-api")?.status, "pass");
-  assert.equal(report.checks.find((check) => check.id === "credential-store")?.status, "pass");
+  assert.equal(report.checks.some((check) => check.id === "credential-store"), false);
 });

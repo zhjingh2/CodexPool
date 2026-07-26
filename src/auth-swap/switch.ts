@@ -23,7 +23,6 @@ import {
 } from "../account-store/paths.js";
 import { listAccounts, readAccountMetadata } from "../account-store/list.js";
 import { resolveCodexHome } from "../preflight/doctor.js";
-import { detectCredentialStoreMode } from "../preflight/config.js";
 import { summarizeCodexProcesses } from "../preflight/processes.js";
 import {
   getSwitchJournalPath,
@@ -249,17 +248,6 @@ export function switchAccount(options: SwitchAccountOptions): SwitchAccountResul
   };
   try {
     recoverPendingSwitch({ poolHome, codexHome });
-
-    const configPath = join(codexHome, "config.toml");
-    if (!existsSync(configPath)) {
-      throw new AccountStoreError("CONFIG_NOT_FOUND", "当前 CODEX_HOME 中不存在 config.toml");
-    }
-    if (detectCredentialStoreMode(readFileSync(configPath, "utf8")) !== "file") {
-      throw new AccountStoreError(
-        "FILE_STORE_REQUIRED",
-        "switch 要求 cli_auth_credentials_store 显式配置为 file",
-      );
-    }
 
     const targetMetadataFingerprint = readStoredFingerprint(poolHome, alias);
     const targetMetadata = readAccountMetadata(targetDirectory, alias);

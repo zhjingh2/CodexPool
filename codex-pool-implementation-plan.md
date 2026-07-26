@@ -49,17 +49,11 @@ Codex Pool 是一个本地账号管理工具，用于管理多个 Codex/ChatGPT 
 - `CODEX_HOME` 未设置，实际使用默认目录 `~/.codex`；
 - 当前登录方式为 ChatGPT；
 - `~/.codex/auth.json` 存在，权限为 `600`；
-- `config.toml` 当前未显式设置 `cli_auth_credentials_store`；
 - 桌面 ChatGPT App 正在运行，并启动了内置 Codex app-server；
 - 当前 App Server 正在使用 `~/.codex` 下的 IPC 和 SQLite 状态文件。
 
-实现前应在工具初始化时确认：
-
-```toml
-cli_auth_credentials_store = "file"
-```
-
-如果用户使用 macOS Keychain 存储凭证，MVP 应明确提示暂不支持直接导入和切换，或引导用户迁移到文件凭证模式。
+工具直接以 `CODEX_HOME/auth.json` 是否存在且有效作为凭证前提，不检查
+`cli_auth_credentials_store`；该配置未显式设置时 Codex 默认使用文件存储。
 
 ## 4. 核心设计
 
